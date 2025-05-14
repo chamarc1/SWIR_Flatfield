@@ -1,5 +1,5 @@
 """
-__name__ =      CompositeProcessorG.py
+__name__ =      CompositeProcessor.py
 __author__ =    "Charlemagne Marc"
 __copyright__ = "Copyright 2025, ESI SWIR Project"
 __credits__ =   ["Charlemagne Marc"]
