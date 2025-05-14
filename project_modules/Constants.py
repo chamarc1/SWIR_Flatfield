@@ -1,6 +1,12 @@
 """
-Constants.py
-Author: Charlemagne Marc
+__name__ =      Constants.py
+__author__ =    "Charlemagne Marc"
+__copyright__ = "Copyright 2025, ESI SWIR Project"
+__credits__ =   ["Charlemagne Marc"]
+__version__ =   "1.0.1"
+__maintainer__ ="Charlemagne Marc"
+__email__ =     "chamrc1@oumbc.edu"
+__status__ =    "Production"
 """
 
 #----------------------------------------------------------------------------
