@@ -1,3 +1,14 @@
+"""
+__name__ =      Main.py
+__author__ =    "Charlemagne Marc"
+__copyright__ = "Copyright 2025, ESI SWIR Project"
+__credits__ =   ["Charlemagne Marc"]
+__version__ =   "1.0.1"
+__maintainer__ ="Charlemagne Marc"
+__email__ =     "chamrc1@oumbc.edu"
+__status__ =    "Production"
+"""
+
 #----------------------------------------------------------------------------
 #-- IMPORT STATEMENTS
 #----------------------------------------------------------------------------
@@ -35,7 +46,7 @@ def main():
     plot_composite(composite_image)
 
     # Plot parabola cores from alongTrack 
-    crossTrack_processor.plot_parabola_cores(cross_filter_pos, cross_dark_pos, core=True, along_track_pos=600)
+    crossTrack_processor.plot_parabola_cores(cross_filter_pos, cross_dark_pos, core=False, along_track_pos=600)
 
     # find flatfiled
     crossTrack_processor.plot_flatfield(cross_filter_pos, cross_dark_pos, num_sigma, along_track_pos=600)
