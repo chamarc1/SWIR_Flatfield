@@ -1,4 +1,4 @@
-# Image Processing Pipeline for Scientific Data
+# SWIR Image Processing Pipeline for Scientific Data
 
 This project provides a Python-based pipeline for processing scientific SWIR image data, specifically designed for handling multi-frame acquisitions across different experimental conditions (e.g., filter positions, degree settings). The core functionality includes dark frame correction, flatfield generation and application, composite image creation, and tools for analyzing cross-track signal profiles.
 
@@ -85,4 +85,4 @@ The project offers the following functionalities:
 
 ## Contributing
 
-Contact Charlemagne Marc for any contriubtion inquiries.
+Contact Charlemagne Marc (chamarc1@umbc.edu) for any contriubtion inquiries.
