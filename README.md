@@ -85,8 +85,4 @@ The project offers the following functionalities:
 
 ## Contributing
 
-(Optional) If you intend for others to contribute to this project, add guidelines here on how to do so (e.g., reporting issues, pull requests).
-
-## License
-
-(Optional) Specify the license under which this project is distributed.
+Contact Charlemagne Marc for any contriubtion inquiries.
