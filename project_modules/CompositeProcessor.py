@@ -465,23 +465,8 @@ class CompositeProcessor:
         plt.savefig(flatfield_save_path) # Saves the generated plot to the specified path.
         plt.show() # Displays the plot.
     
-    def generate_full_image(self, filter_pos, dark_pos):
+    def generate_full_image(self, num_sigma, window_length=61, polyorder=3):
         """
-        Generates a full-image flatfield by averaging all dark-frame corrected images
-        for a given filter position across all degree positions. This provides a 2D flatfield
-        that can be used to correct for pixel-to-pixel sensitivity variations and illumination non-uniformities.
+        creates full image flatfield across every filter position
+        """
 
-        :param filter_pos: str, the filter position for which to generate the flatfield image.
-        :param dark_pos: str, the filter position used to compute the average dark frame for correction.
-        :return: np.ndarray or None, the full-image flatfield as a NumPy array. Returns None if no corrected images are available.
-        """
-        print(f"Generating full image flatfield for filter: {filter_pos}")
-        images = self.generate_images(filter_pos, dark_pos)
-        if not images:
-            print(f"No images found for flatfield generation for filter position: {filter_pos}")
-            return None
-        
-        # Average all corrected images to create the full-image flatfield
-        full_flatfield = np.mean(np.asarray(images), axis=0)
-        print(f"Full image flatfield generated successfully for filter: {filter_pos}.")
-        return full_flatfield
