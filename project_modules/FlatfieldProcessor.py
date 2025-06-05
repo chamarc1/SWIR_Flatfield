@@ -20,11 +20,7 @@ import argparse
 
 # Corrected import path for ImageProcessor, assuming it's in the same directory
 from ImageProcessor import ImageProcessor
-
-# Import necessary dictionaries from Constants.py
-# Assuming Constants.py is in 'project_modules' relative to where this script might be run
-# If FlatfieldProcessor.py is in the same directory as Constants.py, use 'from Constants import directory_dict'
-from project_modules.Constants import directory_dict # <-- Added this import
+from project_modules.Constants import directory_dict 
 
 #----------------------------------------------------------------------------
 #-- Core Image Processing Functions for Flatfielding
