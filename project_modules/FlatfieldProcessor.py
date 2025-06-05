@@ -20,7 +20,7 @@ import argparse
 
 # Corrected import path for ImageProcessor, assuming it's in the same directory
 from ImageProcessor import ImageProcessor
-from project_modules.Constants import directory_dict 
+from Constants import directory_dict 
 
 #----------------------------------------------------------------------------
 #-- Core Image Processing Functions for Flatfielding
