@@ -17,6 +17,7 @@ import numpy as np
 from PIL import Image, ImageEnhance
 from scipy.ndimage import gaussian_filter
 import argparse
+import sdt-python
 
 # Corrected import path for ImageProcessor, assuming it's in the same directory
 from ImageProcessor import ImageProcessor
@@ -132,6 +133,9 @@ def perform_correction_np(R, D_avg, F_avg):
     C = np.nan_to_num(C, nan=0.0, posinf=0.0, neginf=0.0)
 
     return C
+
+class FlatfieldStd:
+    def __init__(self, image_data, gaussian_fit=True, shape=None, density_weight=false)
 
 #----------------------------------------------------------------------------
 #-- FlatfieldProcessor Class
@@ -344,6 +348,17 @@ if __name__ == "__main__":
 
         if corrected_img is not None:
             # Save Corrected Image
+            print(f"Saving corrected image to {args.output_path}...")
+            save_image_from_array(corrected_img, args.output_path)
+            print(f"Corrected image saved successfully to {args.output_path}")
+            
+        corrected_image = processor.process_flatfield_correction(
+            raw_filter_pos=args.raw_filter_pos,
+            dark_filter_pos=args.dark_filter_pos,
+            flat_filter_pos=args.flat_filter_pos
+        )
+        
+        if corrected_img is not None:
             print(f"Saving corrected image to {args.output_path}...")
             save_image_from_array(corrected_img, args.output_path)
             print(f"Corrected image saved successfully to {args.output_path}")
