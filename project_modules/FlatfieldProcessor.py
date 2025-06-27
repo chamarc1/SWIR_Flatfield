@@ -3,7 +3,7 @@ __name__ =      FlatfieldProcessor.py
 __author__ =    "Charlemagne Marc"
 __copyright__ = "Copyright 2025, ESI SWIR Project"
 __credits__ =   ["Charlemagne Marc"]
-__version__ =   "1.0.1"
+__version__ =   "1.1.1"
 __maintainer__ ="Charlemagne Marc"
 __email__ =     "chamrc1@oumbc.edu"
 __status__ =    "Production"
@@ -18,11 +18,32 @@ import json
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy.ndimage import median_filter
+from scipy.signal import savgol_filter
 from scipy.optimize import curve_fit  # Provides functions to use non-linear least squares to fit a function (like a parabola) to data.
+import matplotlib.pyplot as plt
 from project_modules.CompositeProcessor import CompositeProcessor
-from project_modules.CompositeProcessor import plot_composite
-from project_modules.Constants import flatfield_save_path
+from project_modules.Constants import flatfield_save_path, composite_save_path
 from project_modules.Constants import directory_dict, crossTrack_dict, crossTrackDark_dict, alongTrack_dict, alongTrackDark_dict
+
+#----------------------------------------------------------------------------
+#-- plot_composite
+#----------------------------------------------------------------------------
+def plot_composite(composite_image):
+    """plots the composite image from data from both cross and along tracks"""
+    if composite_image is not None:  # Checks if a valid composite image (NumPy array) was provided.
+        plt.imshow(composite_image)
+        plt.axis("on")
+
+        # Set title and labels
+        plt.title("Composite")
+        plt.xlabel('Cross-Track Pixels')
+        plt.ylabel('Along-Track Pixels')
+        os.makedirs(os.path.dirname(composite_save_path), exist_ok=True)
+        plt.savefig(composite_save_path)
+
+        plt.show()
+    else:
+        print("No composite image to display.")
 
 #----------------------------------------------------------------------------
 #-- FlatfieldProcessor Class
@@ -101,41 +122,130 @@ class FlatfieldProcessor:
 
         return x_vals_clean, y_fit, popt # Returns the original x-values (cleaned) and the corresponding fitted y-values, and popt.
     
-    def generate_quadratic_envelope_flatfield(self, smoothing_sigma=None):
+    def sigma_filter(self, x_vals, y_vals, n_sigma):
+        """"Removes data points where y_vals deviate from the mean by more than n_sigma standard deviations.
+
+        This is a simple outlier removal technique used to filter noisy data before further analysis or fitting.
+
+        :param x_vals: np.ndarray, the array of independent variable (x) values corresponding to the y values.
+        :param y_vals: np.ndarray, the array of dependent variable (y) values to be filtered for outliers.
+        :param n_sigma: float, the number of standard deviations away from the mean that a data point can be to be considered an inlier. Data points beyond this threshold are considered outliers and removed.
+        :return: tuple of (x_vals_filtered, y_vals_filtered), containing the x and y values after the outlier removal process.
+        """
+        # Remove NaN values from x_vals and y_vals
+        valid_indices = ~np.isnan(y_vals) # Creates a boolean array indicating indices where y_vals are not NaN.
+        x_vals_clean = x_vals[valid_indices] # Filters x_vals to keep only values at valid indices.
+        y_vals_clean = y_vals[valid_indices] # Filters y_vals to remove NaN values.
+
+        if len(y_vals_clean) == 0:
+            return np.array([]), np.array([]) # Return empty arrays if no valid data
+
+        mean_y = np.mean(y_vals_clean) # Calculates the mean of the cleaned y-values.
+        std_y = np.std(y_vals_clean, mean=mean_y) # Calculates the standard deviation of the cleaned y-values.
+
+        # mask = np.abs(y_vals_clean - mean_y) <= n_sigma * std_y
+        mask = (y_vals_clean >= mean_y - n_sigma * std_y) & (y_vals_clean <= mean_y + n_sigma * std_y) # Creates a boolean mask that is True for data points whose y-value is within `n_sigma` standard deviations of the mean, and False otherwise (outliers).
+
+        return x_vals_clean[mask], y_vals_clean[mask] # Returns the x and y values corresponding to the True values in the mask (i.e., the filtered data without outliers).
+    
+    def extract_profile(self, images, pos, direction="cross", avg_window=10, num_sigma=2.0, window_length=61, polyorder=3):
+        """
+        Extracts and processes a 1D profile (cross-track or along-track) from a list of images.
+        Returns the filtered and smoothed profile and the corresponding x values.
+        """
+        avg_profiles = []
+        for image in images:
+            if direction == "cross":
+                row_start = max(pos - avg_window, 0)
+                row_end = min(pos + avg_window + 1, image.shape[0])
+                if row_start >= row_end:
+                    continue
+                profile = np.mean(image[row_start:row_end, :], axis=0)
+            elif direction == "along":
+                col_start = max(pos - avg_window, 0)
+                col_end = min(pos + avg_window + 1, image.shape[1])
+                if col_start >= col_end:
+                    continue
+                profile = np.mean(image[:, col_start:col_end], axis=1)
+            else:
+                raise ValueError("direction must be 'cross' or 'along'")
+            
+            # Filter out low-signal regions
+            for i in range(profile.shape[0]):
+                if profile[i] < np.nanmax(profile) / 2.0:
+                    profile[i] = np.nan
+
+            avg_profiles.append(profile)
+            
+        if not avg_profiles:
+            return None, None
+        
+        combined_profile = np.nanmean(np.stack(avg_profiles), axis=0)
+        
+        x_vals = np.arange(len(combined_profile))
+        
+        # Outlier rejection
+        x_vals_filtered, profile_filtered = self.sigma_filter(x_vals, combined_profile, num_sigma)
+        
+        # Smoothing
+        if len(profile_filtered) < window_length:
+            window_length = max(polyorder + 2 if (polyorder + 2) % 2 != 0 else polyorder + 3, 3)
+        profile_smoothed = savgol_filter(profile_filtered, window_length=window_length, polyorder=polyorder)
+        
+        # Plotting section
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(x_vals, combined_profile, 'x', color='red', label="Combined Profile (raw)", linewidth=1.5, markersize=2.75)
+        ax.plot(x_vals_filtered, profile_filtered, '.', color='green', label=f"Filtered ({num_sigma}-sigma)", linewidth=1.5)
+        ax.plot(x_vals_filtered, profile_smoothed, color='black', label="Smoothed", linewidth=1.5)
+        ax.set_title(f"Extracted Profile ({direction}-track) at pos={pos}")
+        ax.set_xlabel("Pixel Index")
+        ax.set_ylabel("Signal (DN)")
+        ax.grid(True, linestyle="--", alpha=0.5)
+        ax.legend()
+        plt.show()
+        
+        return x_vals_filtered, profile_smoothed
+    
+    def generate_quadratic_envelope_flatfield(self, pos=600, direction="cross", avg_window=10, num_sigma=2.0, window_length=61, polyorder=3, smoothing_sigma=None):
         """
         Generate a 2D flatfield correction array based on the quadratic envelope fit
-        to the mean cross-track profile of the composite image.
+        to the mean profile of the composite image.
         """
-        composite_image = self.crossTrack_processor.generate_composite(self.cross_filter_pos, self.cross_dark_pos) +\
-            self.alongTrack_processor.generate_composite(self.along_filter_pos, self.along_dark_pos)
-            
-        if composite_image is None:
-            print("No composite image available.")
+        # Use the same images as plot_flatfield
+        images = self.crossTrack_processor.generate_images(self.cross_filter_pos, self.cross_dark_pos)
+        if not images:
+            print("No images available for quadratic envelope flatfield.")
             return None
-        
-        # Applies Gaussian smoothing to the composite_image if a positive sigma is provided.
-        if smoothing_sigma is not None and smoothing_sigma > 0:
-            composite_image = gaussian_filter(composite_image, sigma=smoothing_sigma)
-            
-        # Compute the mean cross-track profile (average over rows)
-        mean_profile = np.mean(composite_image, axis=0)
-        x_vals = np.arange(mean_profile.size)
-        
+
+        x_vals, profile = self.extract_profile(
+            images, pos, direction=direction, avg_window=avg_window,
+            num_sigma=num_sigma, window_length=window_length, polyorder=polyorder
+        )
+        if x_vals is None or profile is None:
+            print("Could not extract profile for quadratic envelope.")
+            return None
+
         # Fit quadratic envelope
-        _, _, popt_coeffs = self.quadratic_fit(x_vals, mean_profile)
-        envelope_1d = self.parabola_func(x_vals, *popt_coeffs) # Calculate the envelope using the fitted coefficients.
-        
-        # Expand to 2D by repeating the envelope for each row
-        envelope_2d = np.tile(envelope_1d, (composite_image.shape[0], 1)) # Creates a 2D array by repeating the 1D envelope across all rows of the composite image.
-        
-        # Normalize the envelope to mean 1 for proper correction
+        _, _, popt_coeffs = self.quadratic_fit(x_vals, profile)
+        envelope_1d = self.parabola_func(np.arange(images[0].shape[1 if direction == "cross" else 0]), *popt_coeffs)
+
+        # Expand to 2D
+        if direction == "cross":
+            envelope_2d = np.tile(envelope_1d, (images[0].shape[0], 1))
+        else:
+            envelope_2d = np.tile(envelope_1d[:, np.newaxis], (1, images[0].shape[1]))
+
+        # Normalize
         envelope_2d /= np.mean(envelope_2d)
-        
-        # plot the envelope flatfield
+
+        # Optional smoothing
+        if smoothing_sigma is not None and smoothing_sigma > 0:
+            envelope_2d = gaussian_filter(envelope_2d, sigma=smoothing_sigma)
+
         plot_composite(envelope_2d)
-        
-        return envelope_2d # Returns the 2D composite_image correction array
-    
+        return envelope_2d
+
     def characterize_pixel_response(self, smoothing_sigma=None, save_path=flatfield_save_path):
         """
         Characterize the pixel-to-pixel relative response (flatfield) using composite images.
@@ -151,15 +261,18 @@ class FlatfieldProcessor:
         # Combine (mean or sum) the composites
         flatfield = (cross_composite + along_composite) / 2.0
         print("[Flatfield] Composite images combined.")
+        plot_composite(flatfield)
 
         # Optional smoothing
         if smoothing_sigma is not None and smoothing_sigma > 0:
             flatfield = gaussian_filter(flatfield, sigma=smoothing_sigma)
             print(f"[Flatfield] Applied Gaussian smoothing (sigma={smoothing_sigma}).")
+            plot_composite(flatfield)
 
         # Normalize to mean 1
         flatfield /= np.mean(flatfield)
         print("[Flatfield] Normalized flatfield to mean 1.")
+        plot_composite(flatfield)
         
         # Defective Pixel Handling
         mean = np.mean(flatfield)

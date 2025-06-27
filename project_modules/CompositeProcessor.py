@@ -3,7 +3,7 @@ __name__ =      CompositeProcessor.py
 __author__ =    "Charlemagne Marc"
 __copyright__ = "Copyright 2025, ESI SWIR Project"
 __credits__ =   ["Charlemagne Marc"]
-__version__ =   "1.0.1"
+__version__ =   "1.1.1"
 __maintainer__ ="Charlemagne Marc"
 __email__ =     "chamrc1@oumbc.edu"
 __status__ =    "Production"
@@ -28,26 +28,6 @@ from project_modules.Constants import directory_dict, crossTrack_dict, crossTrac
 #-- GLOBALS
 #----------------------------------------------------------------------------
 mpl.use("Qt5Agg")                     # Sets the Matplotlib backend to Qt5Agg, which is an interactive backend using the Qt 5 framework. This allows for displaying plots in a separate window.
-
-#----------------------------------------------------------------------------
-#-- plot_composite
-#----------------------------------------------------------------------------
-def plot_composite(composite_image):
-    """plots the composite image from data from both cross and along tracks"""
-    if composite_image is not None:  # Checks if a valid composite image (NumPy array) was provided.
-        plt.imshow(composite_image)
-        plt.axis("on")
-
-        # Set title and labels
-        plt.title("Composite")
-        plt.xlabel('Cross-Track Pixels')
-        plt.ylabel('Along-Track Pixels')
-        os.makedirs(os.path.dirname(composite_save_path), exist_ok=True)
-        plt.savefig(composite_save_path)
-
-        plt.show()
-    else:
-        print("No composite image to display.")
 
 #----------------------------------------------------------------------------
 #-- CompositeProcessor - class for generating composites
@@ -373,105 +353,212 @@ class CompositeProcessor:
 
         return x_vals_clean[mask], y_vals_clean[mask] # Returns the x and y values corresponding to the True values in the mask (i.e., the filtered data without outliers).
 
-    def plot_flatfield(self, filter_pos, dark_pos, num_sigma, along_track_pos, window_length=61, polyorder=3):
+    def plot_flatfield(self, filter_pos, dark_pos, num_sigma, pos, direction="cross", window_length=61, polyorder=3, avg_window=10):
         """
-        Combines all images for a given filter, performs some initial filtering based on a fraction of the maximum,
-        averages the resulting cross-track signals, applies a sigma filter for outlier removal, smooths the data,
-        fits a quadratic curve to the smoothed data, and plots the original data, filtered data, smoothed data,
-        and the quadratic fit. This function aims to generate and visualize a "flatfield" profile for a specific filter.
+        Plots a flatfield profile for a specific filter, allowing either cross-track or along-track direction.
 
         :param filter_pos: str, the filter position to analyze.
         :param dark_pos: str, the dark frame filter position used for correction.
-        :param num_sigma: float, the number of standard deviations to use for the sigma filter to remove outliers.
-        :param along_track_pos: int, the along-track row index around which to average for extracting the cross-track signal from each image.
-        :param window_length: int, the window length for the Savitzky-Golay filter used for smoothing (must be odd and greater than polyorder, default: 61).
-        :param polyorder: int, the polynomial order for the Savitzky-Golay filter (default: 3).
+        :param num_sigma: float, sigma for outlier removal.
+        :param pos: int, the row (for cross) or column (for along) index to center the averaging window.
+        :param direction: str, "cross" for cross-track (default), "along" for along-track.
+        :param window_length: int, Savitzky-Golay smoothing window.
+        :param polyorder: int, polynomial order for smoothing.
+        :param avg_window: int, number of rows/columns to average over (on each side of pos).
         """
-        images = self.generate_images(filter_pos, dark_pos) # Gets the list of dark frame corrected images for the specified filter.
-        if not images: # Checks if there are any images to process.
+        images = self.generate_images(filter_pos, dark_pos)
+        if not images:
             print("No images to process for plotting.")
-            return # Exits if no images are found.
+            return
 
-        avg_rows = None # Initializes a variable to store the averaged cross-track rows from each image.
-        for idx, image in enumerate(images): # Iterates through each corrected image.
-            # Determine bounds for averaging along-track rows
-            row_start = max(along_track_pos - 10, 0) # Calculates the starting row index for averaging, ensuring it's not below 0.
-            row_end = min(along_track_pos + 10 + 1, image.shape[0])  # Calculates the ending row index for averaging, ensuring it's not beyond the image height and adding 1 to include the upper bound.
+        avg_profiles = []
+        for idx, image in enumerate(images):
+            if direction == "cross":
+                row_start = max(pos - avg_window, 0)
+                row_end = min(pos + avg_window + 1, image.shape[0])
+                if row_start >= row_end:
+                    print(f"Invalid row range for image {idx}. Skipping.")
+                    continue
+                profile = np.mean(image[row_start:row_end, :], axis=0)
+            elif direction == "along":
+                col_start = max(pos - avg_window, 0)
+                col_end = min(pos + avg_window + 1, image.shape[1])
+                if col_start >= col_end:
+                    print(f"Invalid column range for image {idx}. Skipping.")
+                    continue
+                profile = np.mean(image[:, col_start:col_end], axis=1)
+            else:
+                raise ValueError("direction must be 'cross' or 'along'")
 
-            # Safety check
-            if row_start >= row_end: # Checks if the averaging range is valid.
-                print(f"Invalid range for image {idx}. Skipping.")
-                continue # Skips to the next image if the range is invalid.
+            # Filter out low-signal regions
+            for i in range(profile.shape[0]):
+                if profile[i] < np.nanmax(profile) / 2.0:
+                    profile[i] = np.nan
 
-            averaged_row = np.mean(image[row_start:row_end, :], axis=0) # Averages the pixel values across the selected along-track rows to get a 1D cross-track signal.
-            for col in range(averaged_row.shape[0]): # Iterates through each pixel (column) in the averaged row.
-                #-- filter out any data that is less than the maximum value of the current averaged row. assign to NaN to help with np.nanmean later on
-                if averaged_row[col] < np.nanmax(averaged_row) / 2.0:#2: # If the pixel value is less than half of the maximum value in the current averaged row...
-                    averaged_row[col] = np.nan # ...it's set to NaN. This is a preliminary filtering step to remove low-signal regions.
+            avg_profiles.append(profile)
 
-            if avg_rows is None: # If this is the first averaged row.
-                avg_rows = averaged_row # Initialize avg_rows with the current averaged row.
-            else: # For subsequent averaged rows.
-                avg_rows = np.vstack((avg_rows, averaged_row)) # Stacks the current averaged row vertically with the previously accumulated averaged rows.
-
-        combined_row = np.nanmean(avg_rows, axis = 0) # Calculates the mean of all the stacked averaged rows, ignoring NaN values. This gives a single, combined cross-track profile.
-        if combined_row is None or np.all(np.isnan(combined_row)):  # No valid data to plot
+        combined_profile = np.nanmean(np.stack(avg_profiles), axis=0)
+        if np.all(np.isnan(combined_profile)):
             print("No valid data to combine for flatfield plot.")
-            return # Exits if there's no valid data to combine and plot.
+            return
 
-        x_vals = np.arange(len(combined_row)) # Creates an array of x-axis values (pixel indices) for the combined cross-track signal.
+        x_vals = np.arange(len(combined_profile))
+        fig, ax = plt.subplots(1, 1, num=2)
+        ax.plot(x_vals, combined_profile, 'x', color='red', label="Rejected Points", linewidth=1.5, markersize=2.75)
 
-        # Plot the combined data
-        fig,ax2 = plt.subplots(1,1,num=2) # Creates a new Matplotlib figure and a subplot.
-        ax2.plot(x_vals, combined_row, 'x', color='red', label="Rejected Points", linewidth=1.5, markersize=2.75) # Plots the combined row with 'x' markers in red, representing points that were likely filtered out as low signal (NaNs).
+        x_vals_filtered, profile_filtered = self.sigma_filter(x_vals, combined_profile, num_sigma)
+        ax.plot(x_vals_filtered, profile_filtered, '.', color='green', label=f"Filtered Signal at {num_sigma}-sigma", linewidth=1.5)
 
-        # num_sigma = 1.0
-        x_vals_filtered, combined_row_filtered = self.sigma_filter(x_vals, combined_row, num_sigma) # Applies the sigma filter to remove outliers from the combined row.
-        ax2.plot(x_vals_filtered, combined_row_filtered, '.', color='green', label=f"Filtered Signal at {num_sigma}-sigma", linewidth=1.5) # Plots the sigma-filtered signal with '.' markers in green.
-
-        if len(combined_row_filtered) < window_length:  # Adjust if row is too short
-            window_length_adj = len(combined_row_filtered) - 1
+        # Smoothing
+        if len(profile_filtered) < window_length:
+            window_length_adj = len(profile_filtered) - 1
             if window_length_adj % 2 == 0:
                 window_length_adj -= 1
             if window_length_adj <= polyorder:
                 window_length_adj = polyorder + 2 if (polyorder + 2) % 2 != 0 else polyorder + 3
             window_length = window_length_adj
-            if window_length <= 0: # Ensure window_length is positive
+            if window_length <= 0:
                 print("Window length for smoothing is too small for filtered data, skipping smoothing.")
-                combined_row_smoothed_filtered = combined_row_filtered
+                profile_smoothed_filtered = profile_filtered
             else:
-                combined_row_smoothed_filtered = savgol_filter(combined_row_filtered, window_length=window_length, polyorder=polyorder)
+                profile_smoothed_filtered = savgol_filter(profile_filtered, window_length=window_length, polyorder=polyorder)
         else:
-            combined_row_smoothed_filtered = savgol_filter(combined_row_filtered, window_length=window_length, polyorder=polyorder)
+            profile_smoothed_filtered = savgol_filter(profile_filtered, window_length=window_length, polyorder=polyorder)
 
-        if len(combined_row) < window_length:  # Adjust if row is too short for original combined_row
-             window_length_adj_orig = len(combined_row) - 1
-             if window_length_adj_orig % 2 == 0:
-                 window_length_adj_orig -= 1
-             if window_length_adj_orig <= polyorder:
-                 window_length_adj_orig = polyorder + 2 if (polyorder + 2) % 2 != 0 else polyorder + 3
-             window_length_orig = window_length_adj_orig
-             if window_length_orig <= 0: # Ensure window_length is positive
-                 print("Window length for smoothing is too small for original data, skipping smoothing.")
-                 combined_row_smoothed_orig = combined_row
-             else:
-                 combined_row_smoothed_orig = savgol_filter(combined_row, window_length=window_length_orig, polyorder=polyorder)
+        if len(combined_profile) < window_length:
+            window_length_adj_orig = len(combined_profile) - 1
+            if window_length_adj_orig % 2 == 0:
+                window_length_adj_orig -= 1
+            if window_length_adj_orig <= polyorder:
+                window_length_adj_orig = polyorder + 2 if (polyorder + 2) % 2 != 0 else polyorder + 3
+            window_length_orig = window_length_adj_orig
+            if window_length_orig <= 0:
+                print("Window length for smoothing is too small for original data, skipping smoothing.")
+                profile_smoothed_orig = combined_profile
+            else:
+                profile_smoothed_orig = savgol_filter(combined_profile, window_length=window_length_orig, polyorder=polyorder)
         else:
-            combined_row_smoothed_orig = savgol_filter(combined_row, window_length=window_length, polyorder=polyorder)
+            profile_smoothed_orig = savgol_filter(combined_profile, window_length=window_length, polyorder=polyorder)
+
+        ax.plot(x_vals, profile_smoothed_orig, color='orange', label="Smoothed Signal With Noise", linewidth=1.5, linestyle='--')
+        ax.plot(x_vals_filtered, profile_smoothed_filtered, color='black', label="Smoothed Signal", linewidth=1.5)
+
+        _, _, popt_coeffs = self.quadratic_fit(x_vals_filtered, profile_smoothed_filtered)
+        ax.plot(x_vals_filtered, self.parabola_func(x_vals_filtered, *popt_coeffs), color='red', label="Envelope, O(x^2)", linewidth=1.5)
+
+        if direction == "cross":
+            ax.set_title(f"Flatfield Plot (Cross-Track): Filter {filter_pos}, Rows {row_start}-{row_end-1}")
+            ax.set_xlabel("Cross-Track Pixel Index")
+        else:
+            ax.set_title(f"Flatfield Plot (Along-Track): Filter {filter_pos}, Cols {col_start}-{col_end-1}")
+            ax.set_xlabel("Along-Track Pixel Index")
+        ax.set_ylabel("Digital Numbers (DN)")
+        ax.grid(True, linestyle="--", alpha=0.5)
+        ax.legend()
+        ax.set_ylim(ymin=0)
+        os.makedirs(os.path.dirname(flatfield_plot_save_path), exist_ok=True)
+        plt.savefig(flatfield_plot_save_path)
+        plt.show()
+    
+    # def plot_flatfield(self, filter_pos, dark_pos, num_sigma, along_track_pos, window_length=61, polyorder=3):
+    #     """
+    #     Combines all images for a given filter, performs some initial filtering based on a fraction of the maximum,
+    #     averages the resulting cross-track signals, applies a sigma filter for outlier removal, smooths the data,
+    #     fits a quadratic curve to the smoothed data, and plots the original data, filtered data, smoothed data,
+    #     and the quadratic fit. This function aims to generate and visualize a "flatfield" profile for a specific filter.
+
+    #     :param filter_pos: str, the filter position to analyze.
+    #     :param dark_pos: str, the dark frame filter position used for correction.
+    #     :param num_sigma: float, the number of standard deviations to use for the sigma filter to remove outliers.
+    #     :param along_track_pos: int, the along-track row index around which to average for extracting the cross-track signal from each image.
+    #     :param window_length: int, the window length for the Savitzky-Golay filter used for smoothing (must be odd and greater than polyorder, default: 61).
+    #     :param polyorder: int, the polynomial order for the Savitzky-Golay filter (default: 3).
+    #     """
+    #     images = self.generate_images(filter_pos, dark_pos) # Gets the list of dark frame corrected images for the specified filter.
+    #     if not images: # Checks if there are any images to process.
+    #         print("No images to process for plotting.")
+    #         return # Exits if no images are found.
+
+    #     avg_rows = None # Initializes a variable to store the averaged cross-track rows from each image.
+    #     for idx, image in enumerate(images): # Iterates through each corrected image.
+    #         # Determine bounds for averaging along-track rows
+    #         row_start = max(along_track_pos - 10, 0) # Calculates the starting row index for averaging, ensuring it's not below 0.
+    #         row_end = min(along_track_pos + 10 + 1, image.shape[0])  # Calculates the ending row index for averaging, ensuring it's not beyond the image height and adding 1 to include the upper bound.
+
+    #         # Safety check
+    #         if row_start >= row_end: # Checks if the averaging range is valid.
+    #             print(f"Invalid range for image {idx}. Skipping.")
+    #             continue # Skips to the next image if the range is invalid.
+
+    #         averaged_row = np.mean(image[row_start:row_end, :], axis=0) # Averages the pixel values across the selected along-track rows to get a 1D cross-track signal.
+    #         for col in range(averaged_row.shape[0]): # Iterates through each pixel (column) in the averaged row.
+    #             #-- filter out any data that is less than the maximum value of the current averaged row. assign to NaN to help with np.nanmean later on
+    #             if averaged_row[col] < np.nanmax(averaged_row) / 2.0:#2: # If the pixel value is less than half of the maximum value in the current averaged row...
+    #                 averaged_row[col] = np.nan # ...it's set to NaN. This is a preliminary filtering step to remove low-signal regions.
+
+    #         if avg_rows is None: # If this is the first averaged row.
+    #             avg_rows = averaged_row # Initialize avg_rows with the current averaged row.
+    #         else: # For subsequent averaged rows.
+    #             avg_rows = np.vstack((avg_rows, averaged_row)) # Stacks the current averaged row vertically with the previously accumulated averaged rows.
+
+    #     combined_row = np.nanmean(avg_rows, axis = 0) # Calculates the mean of all the stacked averaged rows, ignoring NaN values. This gives a single, combined cross-track profile.
+    #     if combined_row is None or np.all(np.isnan(combined_row)):  # No valid data to plot
+    #         print("No valid data to combine for flatfield plot.")
+    #         return # Exits if there's no valid data to combine and plot.
+
+    #     x_vals = np.arange(len(combined_row)) # Creates an array of x-axis values (pixel indices) for the combined cross-track signal.
+
+    #     # Plot the combined data
+    #     fig,ax2 = plt.subplots(1,1,num=2) # Creates a new Matplotlib figure and a subplot.
+    #     ax2.plot(x_vals, combined_row, 'x', color='red', label="Rejected Points", linewidth=1.5, markersize=2.75) # Plots the combined row with 'x' markers in red, representing points that were likely filtered out as low signal (NaNs).
+
+    #     # num_sigma = 1.0
+    #     x_vals_filtered, combined_row_filtered = self.sigma_filter(x_vals, combined_row, num_sigma) # Applies the sigma filter to remove outliers from the combined row.
+    #     ax2.plot(x_vals_filtered, combined_row_filtered, '.', color='green', label=f"Filtered Signal at {num_sigma}-sigma", linewidth=1.5) # Plots the sigma-filtered signal with '.' markers in green.
+
+    #     if len(combined_row_filtered) < window_length:  # Adjust if row is too short
+    #         window_length_adj = len(combined_row_filtered) - 1
+    #         if window_length_adj % 2 == 0:
+    #             window_length_adj -= 1
+    #         if window_length_adj <= polyorder:
+    #             window_length_adj = polyorder + 2 if (polyorder + 2) % 2 != 0 else polyorder + 3
+    #         window_length = window_length_adj
+    #         if window_length <= 0: # Ensure window_length is positive
+    #             print("Window length for smoothing is too small for filtered data, skipping smoothing.")
+    #             combined_row_smoothed_filtered = combined_row_filtered
+    #         else:
+    #             combined_row_smoothed_filtered = savgol_filter(combined_row_filtered, window_length=window_length, polyorder=polyorder)
+    #     else:
+    #         combined_row_smoothed_filtered = savgol_filter(combined_row_filtered, window_length=window_length, polyorder=polyorder)
+
+    #     if len(combined_row) < window_length:  # Adjust if row is too short for original combined_row
+    #          window_length_adj_orig = len(combined_row) - 1
+    #          if window_length_adj_orig % 2 == 0:
+    #              window_length_adj_orig -= 1
+    #          if window_length_adj_orig <= polyorder:
+    #              window_length_adj_orig = polyorder + 2 if (polyorder + 2) % 2 != 0 else polyorder + 3
+    #          window_length_orig = window_length_adj_orig
+    #          if window_length_orig <= 0: # Ensure window_length is positive
+    #              print("Window length for smoothing is too small for original data, skipping smoothing.")
+    #              combined_row_smoothed_orig = combined_row
+    #          else:
+    #              combined_row_smoothed_orig = savgol_filter(combined_row, window_length=window_length_orig, polyorder=polyorder)
+    #     else:
+    #         combined_row_smoothed_orig = savgol_filter(combined_row, window_length=window_length, polyorder=polyorder)
 
 
-        ax2.plot(x_vals, combined_row_smoothed_orig, color='orange', label="Smoothed Signal With Noise", linewidth=1.5, linestyle='--') # Plots the smoothed signal with potential noise (from NaNs) with a dashed orange line.
-        ax2.plot(x_vals_filtered, combined_row_smoothed_filtered, color='black', label="Smoothed Signal", linewidth=1.5) # Plots the smoothed, sigma-filtered signal with a solid black line.
+    #     ax2.plot(x_vals, combined_row_smoothed_orig, color='orange', label="Smoothed Signal With Noise", linewidth=1.5, linestyle='--') # Plots the smoothed signal with potential noise (from NaNs) with a dashed orange line.
+    #     ax2.plot(x_vals_filtered, combined_row_smoothed_filtered, color='black', label="Smoothed Signal", linewidth=1.5) # Plots the smoothed, sigma-filtered signal with a solid black line.
 
-        _, _, popt_coeffs = self.quadratic_fit(x_vals_filtered, combined_row_smoothed_filtered) # Fits a quadratic curve to the smoothed, sigma-filtered data.
-        ax2.plot(x_vals_filtered, self.parabola_func(x_vals_filtered, *popt_coeffs), color='red', label="Envelope, O(x^2)", linewidth=1.5) # Plots the quadratic fit with a solid red line, labeled as the envelope.
+    #     _, _, popt_coeffs = self.quadratic_fit(x_vals_filtered, combined_row_smoothed_filtered) # Fits a quadratic curve to the smoothed, sigma-filtered data.
+    #     ax2.plot(x_vals_filtered, self.parabola_func(x_vals_filtered, *popt_coeffs), color='red', label="Envelope, O(x^2)", linewidth=1.5) # Plots the quadratic fit with a solid red line, labeled as the envelope.
 
-        ax2.set_title(f"Flatfield Plot: Filter {filter_pos}, Row {row_start}-{row_end-1}") # Sets the title of the plot.
-        ax2.set_xlabel("Cross-Track Pixel Index") # Labels the x-axis.
-        ax2.set_ylabel("Digital Numbers (DN)") # Labels the y-axis.
-        ax2.grid(True, linestyle="--", alpha=0.5) # Adds a grid to the plot.
-        ax2.legend() # Displays the legend to identify the different plotted lines.
-        ax2.set_ylim(ymin=0) # Sets the lower limit of the y-axis to 0.
-        os.makedirs(os.path.dirname(flatfield_plot_save_path), exist_ok=True) # Create the directory if it doesn't exist
-        plt.savefig(flatfield_plot_save_path) # Saves the generated plot to the specified path.
-        plt.show() # Displays the plot.
+    #     ax2.set_title(f"Flatfield Plot: Filter {filter_pos}, Row {row_start}-{row_end-1}") # Sets the title of the plot.
+    #     ax2.set_xlabel("Cross-Track Pixel Index") # Labels the x-axis.
+    #     ax2.set_ylabel("Digital Numbers (DN)") # Labels the y-axis.
+    #     ax2.grid(True, linestyle="--", alpha=0.5) # Adds a grid to the plot.
+    #     ax2.legend() # Displays the legend to identify the different plotted lines.
+    #     ax2.set_ylim(ymin=0) # Sets the lower limit of the y-axis to 0.
+    #     os.makedirs(os.path.dirname(flatfield_plot_save_path), exist_ok=True) # Create the directory if it doesn't exist
+    #     plt.savefig(flatfield_plot_save_path) # Saves the generated plot to the specified path.
+    #     plt.show() # Displays the plot.

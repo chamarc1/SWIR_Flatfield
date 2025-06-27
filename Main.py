@@ -3,7 +3,7 @@ __name__ =      Main.py
 __author__ =    "Charlemagne Marc"
 __copyright__ = "Copyright 2025, ESI SWIR Project"
 __credits__ =   ["Charlemagne Marc"]
-__version__ =   "1.0.1"
+__version__ =   "1.1.1"
 __maintainer__ ="Charlemagne Marc"
 __email__ =     "chamrc1@oumbc.edu"
 __status__ =    "Production"
@@ -12,9 +12,9 @@ __status__ =    "Production"
 #----------------------------------------------------------------------------
 #-- IMPORT STATEMENTS
 #----------------------------------------------------------------------------
-# from project_modules.CompositeProcessor import CompositeProcessor
-from project_modules.FlatfieldProcessor import FlatfieldProcessor
-# from project_modules.CompositeProcessor import plot_composite
+from project_modules.CompositeProcessor import CompositeProcessor
+from project_modules.FlatfieldProcessor import FlatfieldProcessor, plot_composite
+from project_modules.Constants import directory_dict, crossTrack_dict, crossTrackDark_dict, alongTrack_dict, alongTrackDark_dict
 import argparse
 
 #----------------------------------------------------------------------------
@@ -63,23 +63,16 @@ def main():
         #     alongTrack_processor.generate_composite(along_filter_pos, along_dark_pos)  
         # plot_composite(composite_image)
 
-        # # Plot parabola cores from alongTrack 
-        # crossTrack_processor.plot_parabola_cores(cross_filter_pos, cross_dark_pos, core=True, along_track_pos=600)
+        # # # Plot parabola cores from alongTrack 
+        # # crossTrack_processor.plot_parabola_cores(cross_filter_pos, cross_dark_pos, core=True, along_track_pos=600)
+        # # alongTrack_processor.plot_parabola_cores(cross_filter_pos, cross_dark_pos, core=True, along_track_pos=600)
 
         # # find flatfiled
-        # crossTrack_processor.plot_flatfield(cross_filter_pos, cross_dark_pos, args.num_sigma, along_track_pos=600)
-        
-        # crossTrack_processor.generate_full_flatfield(cross_filter_pos, cross_dark_pos, smoothing_sigma=args.num_sigma)
-        
-        # # Report quadratic values to shell
-        # print(f"constant = {crossTrack_processor.constant:.7f} ohm")
-        # print(f"linear = {crossTrack_processor.linear}")
-        # print(f"quadratic = {crossTrack_processor.quadratic}")
-        
-        # print("-" * 30)
-        # print("Flatfield Correction script finished.")
+        # crossTrack_processor.plot_flatfield(cross_filter_pos, cross_dark_pos, args.num_sigma, pos=600)
+        # alongTrack_processor.plot_flatfield(along_filter_pos, along_dark_pos, args.num_sigma, pos=600, direction="cross")
         
         flatfield_processor = FlatfieldProcessor(args.wheel_pos)
+        flatfield_processor.generate_quadratic_envelope_flatfield(smoothing_sigma=args.num_sigma)
         flatfield_processor.characterize_pixel_response(smoothing_sigma=args.num_sigma)
         
     except Exception as e:
