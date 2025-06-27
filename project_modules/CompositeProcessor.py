@@ -9,6 +9,7 @@ __email__ =     "chamrc1@oumbc.edu"
 __status__ =    "Production"
 """
 
+
 #----------------------------------------------------------------------------
 #-- IMPORT STATEMENTS
 #----------------------------------------------------------------------------
@@ -18,10 +19,10 @@ import matplotlib as mpl              # A comprehensive library for creating sta
 import matplotlib.pyplot as plt       # A module within Matplotlib that provides a MATLAB-like interface for plotting. Used for displaying images and other plots.
 from scipy.signal import savgol_filter# A signal processing tool for smoothing data using the Savitzky-Golay filter, which fits successive sub-sets of adjacent data points with a low-degree polynomial by linear least squares.
 from scipy.optimize import curve_fit  # Provides functions to use non-linear least squares to fit a function (like a parabola) to data.
+from scipy.ndimage import gaussian_filter # Needed for flat field composite generation
 from project_modules.ImageProcessor import ImageProcessor # Imports the ImageProcessor class from a local module, likely used for loading and basic processing of individual images.
-from project_modules.Constants import composite_save_path, parabola_save_path, flatfield_save_path # Imports predefined file paths for saving generated plots from a local Constants module.
+from project_modules.Constants import composite_save_path, parabola_save_path, flatfield_save_path, flatfield_plot_save_path # Imports predefined file paths for saving generated plots from a local Constants module.
 from project_modules.Constants import directory_dict, crossTrack_dict, crossTrackDark_dict, alongTrack_dict, alongTrackDark_dict
-from PIL import Image
 
 #----------------------------------------------------------------------------
 #-- GLOBALS
@@ -62,25 +63,12 @@ class CompositeProcessor:
         self.track_dir = track_dir
         self.metadata = metadata
         self.track_processor = ImageProcessor(track_dir)
-        # INitialize 2D fit coefficients and errors as None
-        # These will be populated by generate_flatfield
-        self.constant = None
-        self.linear = None          # Stores [D, E] coefficients for x and y linear terms in 2D fit
-        self.quadratic = None       # Stores [A, B, C] coefficients for x^2, y^2, xy terms in 2D fit
-        self.constant_err = None
-        self.linear_err = None      # Stores [D_err, E_err]
-        self.quadratic_err = None   # Stores [A_err, B_err, C_err]
-    
-    def quadratic_surface_2d(self, coords, A, B, C, D, E, G):
-        """
-        Helper function: Defines the 2D quadratic surface model.
-        This is for fitting the full 2D flat field across the image.
-        coords: tuple (X, Y) where X and Y are 1D arrays of x and y coordinates (flattened).
-        A, B, C, D, E, G: The coefficients of the quadratic equation.
-        F(x, y) = A x^2 + B y^2 + C xy + D x + E y + G
-        """
-        X, Y = coords
-        return A * X**2 + B * Y**2 + C * X * Y + D * X + E * Y + G
+        self.constant = 0.0
+        self. linear = 0.0
+        self.quadratic = 0.0
+        self.constant_err = 0.0
+        self.linear_err = 0.0
+        self.quadratic_err = 0.0
 
     def compute_average_dark_frame(self, dark_pos):
         """Compute the average dark frame from all images taken at the specified dark position.
@@ -340,22 +328,22 @@ class CompositeProcessor:
 
         # Perform the least-squares fitting
         popt, pcov = curve_fit(self.parabola_func, x_vals_clean, y_vals_clean) # Uses the `curve_fit` function from scipy.optimize to find the optimal parameters (constant, linear, quadratic) that minimize the sum of the squares of the residuals between y_vals and the parabola defined by parabola_func. `popt` contains the fitted parameters, and `pcov` contains the estimated covariance of popt.
-        # constant = popt[0] # Extracts the fitted constant term.
-        # linear = popt[1] # Extracts the fitted linear term.
-        # quadratic = popt[2] # Extracts the fitted quadratic term.
-        # constant_err = np.sqrt(pcov[0][0]) # Calculates the standard error of the constant term from the covariance matrix.
-        # linear_err = np.sqrt(pcov[1][1]) # Calculates the standard error of the linear term.
-        # quadratic_err = np.sqrt(pcov[2][2]) # Calculates the standard error of the quadratic term.
+        self.constant = popt[0] # Extracts the fitted constant term.
+        self.linear = popt[1] # Extracts the fitted linear term.
+        self.quadratic = popt[2] # Extracts the fitted quadratic term.
+        self.constant_err = np.sqrt(pcov[0][0]) # Calculates the standard error of the constant term from the covariance matrix.
+        self.linear_err = np.sqrt(pcov[1][1]) # Calculates the standard error of the linear term.
+        self.quadratic_err = np.sqrt(pcov[2][2]) # Calculates the standard error of the quadratic term.
 
         y_fit = self.parabola_func(x_vals_clean, *popt) # Calculates the y-values of the fitted parabola using the original (cleaned) x_vals and the fitted parameters.
 
         # # Report values to shell
-        # print(f"constant = {constant:.7f} ohm") # Prints the fitted constant value with 7 decimal places and its unit.
-        # print(f"constant std. error = {constant_err:.7f} ohm") # Prints the standard error of the constant term.
-        # print(f"linear = {linear:.2E} ohm/T") # Prints the fitted linear coefficient in scientific notation with 2 decimal places and its unit.
-        # print(f"linear std. error = {linear_err:.2E} ohm/T") # Prints the standard error of the linear term.
-        # print(f"quadratic = {quadratic:.4E} ohm/T^2") # Prints the fitted quadratic coefficient in scientific notation with 4 decimal places and its unit.
-        # print(f"quadratic std. error = {quadratic_err:.2E} ohm/T^2") # Prints the standard error of the quadratic term.
+        # print(f"constant = {self.constant:.7f} ohm") # Prints the fitted constant value with 7 decimal places and its unit.
+        # print(f"constant std. error = {self.constant_err:.7f} ohm") # Prints the standard error of the constant term.
+        # print(f"linear = {self.linear:.2E} ohm/T") # Prints the fitted linear coefficient in scientific notation with 2 decimal places and its unit.
+        # print(f"linear std. error = {self.linear_err:.2E} ohm/T") # Prints the standard error of the linear term.
+        # print(f"quadratic = {self.quadratic:.4E} ohm/T^2") # Prints the fitted quadratic coefficient in scientific notation with 4 decimal places and its unit.
+        # print(f"quadratic std. error = {self.quadratic_err:.2E} ohm/T^2") # Prints the standard error of the quadratic term.
 
         return x_vals_clean, y_fit, popt # Returns the original x-values (cleaned) and the corresponding fitted y-values, and popt.
 
@@ -484,157 +472,43 @@ class CompositeProcessor:
         ax2.grid(True, linestyle="--", alpha=0.5) # Adds a grid to the plot.
         ax2.legend() # Displays the legend to identify the different plotted lines.
         ax2.set_ylim(ymin=0) # Sets the lower limit of the y-axis to 0.
-        os.makedirs(os.path.dirname(flatfield_save_path), exist_ok=True) # Create the directory if it doesn't exist
-        plt.savefig(flatfield_save_path) # Saves the generated plot to the specified path.
+        os.makedirs(os.path.dirname(flatfield_plot_save_path), exist_ok=True) # Create the directory if it doesn't exist
+        plt.savefig(flatfield_plot_save_path) # Saves the generated plot to the specified path.
         plt.show() # Displays the plot.
+    
+    def generate_quadratic_envelope_flatfield(self, filter_pos, dark_pos, smoothing_sigma=None):
+        """
+        Generate a 2D flatfield correction array based on the quadratic envelope fit
+        to the mean cross-track profile of the composite image.
+        """
+        composite = self.generate_composite(filter_pos, dark_pos)
+        if composite is None:
+            print("No composite image available.")
+            return None
         
-    def generate_flatfield(self, filter_pos: str, dark_pos: str) -> np.ndarray:
-        """
-        Generates a 2D fitted flat-field image using a quadratic polynomial fit
-        across the entire image, storing the 2D coefficients and their errors
-        in self.constant, self.linear (D, E), and self.quadratic (A, B, C).
-
-        This method first computes the average dark-subtracted flat field image.
-        Then, it fits a 2D quadratic surface to this dark-subtracted flat field.
-        The fitted coefficients (constant, linear in x, linear in y, quadratic in x,
-        quadratic in y, and cross-term xy) and their errors are stored as class variables.
-        Finally, it returns the generated 2D fitted flat field, normalized to have a mean of 1.
-
-        :param filter_pos: str, the filter position for which to generate the flat field.
-                           This corresponds to the "light" or "flat" images.
-        :param dark_pos: str, the filter position used to compute the average dark frame
-                         for correction of the flat field images.
-        :return: np.ndarray, the 2D NumPy array representing the generated (fitted)
-                 and normalized flat field.
-        :raises ValueError: If no flat field images are found or if the fit fails.
-        """
-        # 1. Get average dark-subtracted flat field image
-        # This will get a list of dark-corrected images for the specified filter_pos
-        raw_flat_images = self.generate_images(filter_pos, dark_pos)
-        if not raw_flat_images:
-            raise ValueError(f"No flat field images found for filter position: {filter_pos} after dark correction.")
-
-        # Average all the dark-subtracted flat images to create a single master flat for fitting
-        master_flat_for_fit = np.mean(np.asarray(raw_flat_images).astype(np.float64), axis=0)
-
-        # Handle potential zero or negative values (e.g., due to noise or sensor characteristics)
-        # These can cause issues with fitting or subsequent division. Clamp to a small positive value.
-        master_flat_for_fit[master_flat_for_fit < 1.0] = 1.0
-
-        # 2. Prepare data for the 2D quadratic fit
-        height, width = master_flat_for_fit.shape
-        X_grid, Y_grid = np.meshgrid(np.arange(width), np.arange(height))
-
-        # Flatten the arrays for curve_fit
-        x_coords_flat = X_grid.flatten()
-        y_coords_flat = Y_grid.flatten()
-        flat_values_flat = master_flat_for_fit.flatten()
-
-        # Normalize coordinates for better numerical stability during fitting
-        # X_norm and Y_norm will range approximately from -1 to 1
-        x_norm = (x_coords_flat - (width - 1) / 2) / (width / 2)
-        y_norm = (y_coords_flat - (height - 1) / 2) / (height / 2)
-
-        # Initial guess for coefficients (A, B, C for x^2, y^2, xy; D, E for x, y; G for constant)
-        # A reasonable initial guess for the constant term is the mean of the flat field.
-        # Other coefficients can often start near zero.
-        initial_guess = [0.001, 0.001, 0.001, 0.001, 0.001, np.mean(master_flat_for_fit)]
-
-        try:
-            # 3. Perform the 2D Quadratic Fit
-            popt, pcov = curve_fit(self.quadratic_surface_2d, (x_norm, y_norm),
-                                   flat_values_flat, p0=initial_guess)
-
-            # Extract 2D coefficients and store them in the class variables
-            # A, B, C, D, E, G (order from quadratic_surface_2d)
-            self.quadratic = np.array([popt[0], popt[1], popt[2]]) # A (x^2), B (y^2), C (xy)
-            self.linear = np.array([popt[3], popt[4]])             # D (x), E (y)
-            self.constant = popt[5]                                # G (constant)
-
-            # Extract standard errors from the covariance matrix
-            perr = np.sqrt(np.diag(pcov))
-            self.quadratic_err = np.array([perr[0], perr[1], perr[2]])
-            self.linear_err = np.array([perr[3], perr[4]])
-            self.constant_err = perr[5]
-
-            print("\n--- 2D Quadratic Fit Results for Flat Field ---")
-            print(f"Constant (G): {self.constant:.4f} +/- {self.constant_err:.4f}")
-            print(f"Linear (D, E): {self.linear[0]:.4f} +/- {self.linear_err[0]:.4f}, "
-                  f"{self.linear[1]:.4f} +/- {self.linear_err[1]:.4f}")
-            print(f"Quadratic (A, B, C): {self.quadratic[0]:.6f} +/- {self.quadratic_err[0]:.6f}, "
-                  f"{self.quadratic[1]:.6f} +/- {self.quadratic_err[1]:.6f}, "
-                  f"{self.quadratic[2]:.6f} +/- {self.quadratic_err[2]:.6f}")
-
-        except RuntimeError as e:
-            raise RuntimeError(f"2D quadratic fit for flat field failed: {e}")
-
-        # 4. Generate the Fitted Flat Field image
-        # Use the original (non-normalized) coordinates for generating the output image
-        # but apply the same normalization transformation to them as was used during the fit
-        X_grid_for_output_norm = (X_grid - (width - 1) / 2) / (width / 2)
-        Y_grid_for_output_norm = (Y_grid - (height - 1) / 2) / (height / 2)
-
-        fitted_flat_field = self.quadratic_surface_2d((X_grid_for_output_norm, Y_grid_for_output_norm), *popt)
-
-        # Ensure no zero or negative values in the fitted flat field, if they occurred due to extrapolation
-        fitted_flat_field[fitted_flat_field < 1e-6] = 1e-6 # Clamp to a very small positive minimum
-
-        # 5. Normalize the fitted flat field so its mean is 1
-        # This preserves the overall brightness of the corrected image.
-        mean_fitted_value = np.mean(fitted_flat_field)
-        if mean_fitted_value == 0:
-            raise RuntimeError("Mean of fitted flat field is zero, cannot normalize.")
-        normalized_fitted_flat_field = fitted_flat_field / mean_fitted_value
-
-        return normalized_fitted_flat_field
-
-    def apply_2d_flatfield_correction(self, raw_image: np.ndarray, dark_image: np.ndarray) -> np.ndarray:
-        """
-        Applies 2D flat-field correction to a raw image using the coefficients
-        previously stored by `generate_flatfield`.
-
-        :param raw_image: np.ndarray, The raw image to be corrected.
-        :param dark_image: np.ndarray, The dark frame corresponding to the raw image.
-        :return: np.ndarray, The flat-field corrected image.
-        :raises RuntimeError: If `generate_flatfield` has not been called or the
-                              fitted flat field coefficients are not available.
-        :raises ValueError: If input images are not 2D NumPy arrays or have different shapes.
-        """
-        if self.constant is None or self.linear is None or self.quadratic is None:
-            raise RuntimeError("Flat field coefficients are not available. Call generate_flatfield first.")
-
-        if not (isinstance(raw_image, np.ndarray) and raw_image.ndim == 2):
-            raise ValueError("raw_image must be a 2D NumPy array.")
-        if not (isinstance(dark_image, np.ndarray) and dark_image.ndim == 2):
-            raise ValueError("dark_image must be a 2D NumPy array.")
-        if raw_image.shape != dark_image.shape:
-            raise ValueError("raw_image and dark_image must have the same shape.")
-
-        height, width = raw_image.shape
-        X_grid, Y_grid = np.meshgrid(np.arange(width), np.arange(height))
-
-        # Re-create the normalized coordinates that were used during the fit
-        x_norm = (X_grid - (width - 1) / 2) / (width / 2)
-        y_norm = (Y_grid - (height - 1) / 2) / (height / 2)
-
-        # Reconstruct the fitted flat field using stored coefficients
-        # Need to combine the stored coefficients into a single tuple/list in the order expected by quadratic_surface_2d
-        popt_reconstructed = (
-            self.quadratic[0], self.quadratic[1], self.quadratic[2],  # A, B, C
-            self.linear[0], self.linear[1],                           # D, E
-            self.constant                                             # G
-        )
-
-        fitted_flat_field = self.quadratic_surface_2d((x_norm, y_norm), *popt_reconstructed)
-        fitted_flat_field[fitted_flat_field < 1e-6] = 1e-6 # Ensure minimum value to prevent division by zero
-
-        # Normalize the reconstructed fitted flat field (same as during generation)
-        mean_fitted_value = np.mean(fitted_flat_field)
-        if mean_fitted_value == 0:
-            raise RuntimeError("Mean of reconstructed fitted flat field is zero, cannot normalize.")
-        normalized_fitted_flat_field = fitted_flat_field / mean_fitted_value
-
-        # Perform correction: (Raw - Dark) / Fitted_Flat
-        corrected_image = (raw_image.astype(np.float64) - dark_image.astype(np.float64)) / normalized_fitted_flat_field
-
-        return corrected_image
+        # Applies Gaussian smoothing to the flatfield if a positive sigma is provided.
+        if smoothing_sigma is not None and smoothing_sigma > 0:
+            flatfield = gaussian_filter(flatfield, sigma=smoothing_sigma)
+            
+        # Compute the mean cross-track profile (average over rows)
+        mean_profile = np.mean(composite, axis=0)
+        x_vals = np.arange(mean_profile.size)
+        
+        # Fit quadratic envelope
+        _, _, popt_coeffs = self.quadratic_fit(x_vals, mean_profile)
+        envelope_1d = self.parabola_func(x_vals, *popt_coeffs) # Calculate the envelope using the fitted coefficients.
+        
+        # Expand to 2D by repeating the envelope for each row
+        envelope_2d = np.title(envelope_1d, (composite.shape[0], 1)) # Creates a 2D array by repeating the 1D envelope across all rows of the composite image.
+        
+        # Normalize the envelope to mean 1 for proper correction
+        envelope_2d /= np.mean(envelope_2d)
+        
+        # plot the flatfield
+        fig, ax = plt.subplots(1,1,num=2) # Creates a new Matplotlib figure and a subplot.
+        im = ax.imshow(envelope_2d)
+        ax.set_title(f"Quadratic Envelope Flatfield for Filter {filter_pos}")
+        plt.colorbar(im, ax=ax)
+        plt.show()
+        
+        return envelope_2d # Returns the 2D flatfield correction array.

@@ -14,7 +14,8 @@ __status__ =    "Production"
 #----------------------------------------------------------------------------
 composite_save_path = r"/data/home/cmarc/SWIR_Projects/Flatfield/Images/composite.png"
 parabola_save_path = r"/data/home/cmarc/SWIR_Projects/Flatfield/Images/along_track.png"
-flatfield_save_path = r"/data/home/cmarc/SWIR_Projects/Flatfield/Images/flatfield_plot.png"
+flatfield_save_path = r"/data/home/cmarc/SWIR_Projects/Flatfield/Images/flatfield.png"
+flatfield_plot_save_path = r"/data/home/cmarc/SWIR_Projects/Flatfield/Images/flatfield_plot.png"
 corrected_composite_save_path = r"/data/home/cmarc/SWIR_Projects/Flatfield/Images/corrected_composite.png"
 
 

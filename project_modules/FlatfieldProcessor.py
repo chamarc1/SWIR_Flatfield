@@ -13,358 +13,207 @@ __status__ =    "Production"
 #-- IMPORT STATEMENTS
 #----------------------------------------------------------------------------
 import os
+import datetime
+import json
 import numpy as np
-from PIL import Image, ImageEnhance
 from scipy.ndimage import gaussian_filter
-import argparse
-import sdt-python
-
-# Corrected import path for ImageProcessor, assuming it's in the same directory
-from ImageProcessor import ImageProcessor
-from Constants import directory_dict 
-
-#----------------------------------------------------------------------------
-#-- Core Image Processing Functions for Flatfielding
-#----------------------------------------------------------------------------
-
-def save_image_from_array(img_array, file_path):
-    """
-    Normalizes a float NumPy array to 0-255 (uint8) and saves it as a grayscale image.
-    This function handles potential NaN or infinite values by converting them to 0.0
-    before normalization and clipping.
-    """
-    # Handle potential NaN or infinite values before normalization
-    img_array = np.nan_to_num(img_array, nan=0.0, posinf=0.0, neginf=0.0)
-
-    C_min = img_array.min()
-    C_max = img_array.max()
-
-    if C_max > C_min:
-        C_normalized = (img_array - C_min) / (C_max - C_min)
-    else:
-        # If all values are the same (e.g., a completely black image), result should be uniform (e.g., black)
-        C_normalized = np.zeros_like(img_array)
-
-    C_normalized = (C_normalized * 255).astype('uint8')
-    Image.fromarray(C_normalized).convert('L').save(file_path) # 'L' for grayscale
-
-def generate_synthetic_dark_flat_fields_np(image_shape, sigma_dark_flat=1.0):
-    """
-    Generates synthetic dark and flat field images as NumPy arrays based on a
-    reference image shape. This is useful for testing when actual dark/flat fields
-    are not available.
-
-    :param image_shape: tuple, the desired (height, width) shape for the synthetic images.
-    :param sigma_dark_flat: float, standard deviation for Gaussian smoothing applied.
-    :return: tuple of (smoothed_dark, flat_array_smoothed), the synthetic dark and flat fields.
-    """
-    # Create a dummy raw image array for synthetic generation logic's initial PIL conversion
-    # Assume a grayscale image for PIL conversion for consistency.
-    # A non-zero value is added to simulate some signal for the dark field generation.
-    dummy_raw_image_array = np.zeros(image_shape, dtype=np.uint8)
-    dummy_raw_image_array[image_shape[0]//2, image_shape[1]//2] = 100 # Simple spot to make it not completely black initially
-
-    # Generate Synthetic Dark Field (D)
-    # Convert dummy raw to PIL Image (L mode for grayscale) for brightness enhancement
-    raw_pil_L = Image.fromarray(dummy_raw_image_array).convert('L')
-    enhancer = ImageEnhance.Brightness(raw_pil_L)
-    # Reduce brightness to simulate a dark field (e.g., reduce to 20% of original brightness)
-    dark_image_pil = enhancer.enhance(0.2)
-    dark_array = np.array(dark_image_pil).astype('float32')
-
-    # Apply Gaussian smoothing to synthetic dark field
-    if sigma_dark_flat > 0:
-        smoothed_dark = gaussian_filter(dark_array, sigma=sigma_dark_flat)
-    else:
-        smoothed_dark = dark_array
-
-    # Generate Synthetic Flat Field (F) by creating a uniform image with noise
-    # Desired brightness level for flat field (less than 255 to avoid clipping on noise)
-    flat_brightness_value = 200
-    flat_array = np.full(image_shape, flat_brightness_value, dtype='float32')
-    noise = np.random.normal(0, 5, flat_array.shape).astype('float32') # Add Gaussian noise
-    flat_array = flat_array + noise
-    flat_array = np.clip(flat_array, 0, 255).astype('float32') # Clip values to valid range
-
-    # Apply Gaussian smoothing to synthetic flat field
-    if sigma_dark_flat > 0:
-        flat_array_smoothed = gaussian_filter(flat_array, sigma=sigma_dark_flat)
-    else:
-        flat_array_smoothed = flat_array
-
-    return smoothed_dark, flat_array_smoothed
-
-def perform_correction_np(R, D_avg, F_avg):
-    """
-    Performs flat field correction on NumPy arrays following the formula:
-    I_ij = (R_ij - D_ij) * (mean(F_kl - D_kl) / (F_ij - D_ij))
-    (Adapted from Equation 1 in AMT paper: https://amt.copernicus.org/articles/17/5709/2024/)
-
-    :param R: Raw image array (R_ij).
-    :param D_avg: Averaged Dark Field image array (D_ij).
-    :param F_avg: Averaged Flat Field image array (F_ij).
-    :return: Corrected image array (I_ij).
-    :raises ValueError: If input image dimensions are not consistent.
-    """
-    if R.shape != D_avg.shape or R.shape != F_avg.shape:
-        raise ValueError("All input images (Raw, Dark Average, Flat Average) must have the same dimensions for correction.")
-
-    # Calculate (F_avg - D_avg), which is F_corr (dark-corrected flat-field image) in the paper
-    F_corr = F_avg - D_avg
-
-    # Calculate mean(F_kl - D_kl)
-    m = np.mean(F_corr)
-
-    # Avoid division by zero: replace zeros or near-zeros in F_corr with a small constant (epsilon)
-    epsilon = 1e-6
-    denominator = F_corr.copy()
-    denominator[np.abs(denominator) < epsilon] = epsilon
-
-    # Calculate gain factor: G_ij = mean(F_corr) / F_corr
-    G = m / denominator
-
-    # Calculate (R_ij - D_ij), which is R_corr (dark-corrected raw image)
-    R_corr = R - D_avg
-
-    # Apply gain to the dark-corrected raw image to get the final corrected image
-    C = R_corr * G
-
-    # Handle any potential NaN or infinite values resulting from calculation
-    C = np.nan_to_num(C, nan=0.0, posinf=0.0, neginf=0.0)
-
-    return C
-
-class FlatfieldStd:
-    def __init__(self, image_data, gaussian_fit=True, shape=None, density_weight=false)
+from scipy.ndimage import median_filter
+from scipy.optimize import curve_fit  # Provides functions to use non-linear least squares to fit a function (like a parabola) to data.
+from project_modules.CompositeProcessor import CompositeProcessor
+from project_modules.CompositeProcessor import plot_composite
+from project_modules.Constants import flatfield_save_path
+from project_modules.Constants import directory_dict, crossTrack_dict, crossTrackDark_dict, alongTrack_dict, alongTrackDark_dict
 
 #----------------------------------------------------------------------------
 #-- FlatfieldProcessor Class
 #----------------------------------------------------------------------------
 class FlatfieldProcessor:
-    def __init__(self, image_data_root_dir, sigma=1.0):
+    def __init__(self, wheel_pos):
         """
         Initializes the FlatfieldProcessor. This class coordinates the loading of
         images via ImageProcessor and applies flat field correction.
-
-        :param image_data_root_dir: The root directory containing all image data (raw, dark, flat).
-                                    Expected structure: root_dir/[filter_pos]/[degree_pos]/image.tif
-        :param sigma: Standard deviation for Gaussian smoothing applied to images during loading/averaging.
-                      Set to 0 to disable smoothing.
         """
-        self.image_processor = ImageProcessor(image_data_root_dir)
-        self.sigma = sigma
-        print(f"FlatfieldProcessor initialized with root directory: {image_data_root_dir}")
-        print(f"Default smoothing sigma: {self.sigma}")
+        self.crossTrack_processor = CompositeProcessor(directory_dict["crossTrack"], directory_dict["metadata"])
+        self.alongTrack_processor = CompositeProcessor(directory_dict["alongTrack"], directory_dict["metadata"])
 
-        # Trigger ImageProcessor to load all data when FlatfieldProcessor is initialized.
-        # This will populate self.image_processor.image_data for subsequent access.
-        _ = self.image_processor.image_data # Accessing the property triggers loading if it's lazy.
-        print("All image data loaded by ImageProcessor.")
+        if not wheel_pos.isdigit:
+            print("Enter correct wheel pos")
+            raise ValueError("Invalid input value")
 
-    def _get_averaged_image_array(self, filter_position):
+        self.cross_filter_pos = crossTrack_dict[wheel_pos]
+        self.cross_dark_pos = crossTrackDark_dict[wheel_pos]
+        self.along_filter_pos = alongTrack_dict[wheel_pos]
+        self.along_dark_pos = alongTrackDark_dict[wheel_pos]
+    
+    def parabola_func(self, x, constant, linear, quadratic):
         """
-        Helper method to retrieve and average all images for a given filter position
-        from ImageProcessor's loaded data. Applies Gaussian smoothing during aggregation.
+        Defines a parabolic function (quadratic polynomial).
 
-        :param filter_position: str, the filter position string (e.g., 'dark', 'flat').
-        :return: np.ndarray, the averaged image array (float32), or None if no images are found.
+        This function is used as the model for fitting a parabola to data points.
+
+        :param x: float or np.ndarray, the independent variable(s) at which to evaluate the parabola.
+        :param constant: float, the y-intercept (constant term) of the parabola.
+        :param linear: float, the coefficient of the linear term (the slope at x=0 if quadratic is zero).
+        :param quadratic: float, the coefficient of the quadratic term (determines the curvature of the parabola).
+        :return: float or np.ndarray, the calculated y-value(s) of the parabola for the given x value(s).
         """
-        images = []
-        # Access image_data property of ImageProcessor, which triggers loading if not already done.
-        # Iterates through all degree positions within the specified filter position.
-        for degree_pos_data in self.image_processor.image_data.get(filter_position, {}).values():
-            for img_array in degree_pos_data:
-                # Convert raw image (uint16) to float32 before smoothing
-                img_float = img_array.astype(np.float32)
-                if self.sigma > 0:
-                    smoothed_array = gaussian_filter(img_float, sigma=self.sigma)
-                else:
-                    smoothed_array = img_float
-                images.append(smoothed_array)
-
-        if not images:
-            return None
-        # Average all collected and smoothed images pixel-wise
-        return np.mean(np.asarray(images), axis=0)
-
-    def process_flatfield_correction(self, raw_filter_pos, dark_filter_pos, flat_filter_pos):
-        """
-        Coordinates the full flat field correction process for a specified raw image
-        filter position using averaged dark and flat fields.
-
-        The process involves:
-        1. Loading a raw image to be corrected (currently takes the first available).
-        2. Computing the average dark frame from all images in `dark_filter_pos`.
-        3. Computing the average flat frame from all images in `flat_filter_pos`.
-        4. Applying the combined dark and flat field correction formula to the raw image.
-
-        :param raw_filter_pos: The filter position string for the raw images to be corrected.
-        :param dark_filter_pos: The filter position string for the dark images used to compute the average dark frame.
-        :param flat_filter_pos: The filter position string for the flat images used to compute the average flat frame.
-        :return: np.ndarray, the corrected image array (float32), or None if an error occurs.
-        """
-        print(f"\n--- Starting Flat Field Correction ---")
-        print(f"Raw Image Filter: '{raw_filter_pos}'")
-        print(f"Dark Image Filter: '{dark_filter_pos}'")
-        print(f"Flat Image Filter: '{flat_filter_pos}'")
-        print(f"Smoothing Sigma: {self.sigma}")
-        print("-" * 30)
-
-        try:
-            # 1. Load Raw Image to be corrected (R_ij)
-            # For simplicity in this CLI, we take the first raw image found from the first degree position.
-            raw_data_for_pos = self.image_processor.image_data.get(raw_filter_pos)
-            if not raw_data_for_pos:
-                raise ValueError(f"No raw images found for filter position '{raw_filter_pos}'. Cannot proceed.")
-
-            first_degree_pos_raw = next(iter(raw_data_for_pos))
-            # Convert to float32 and apply smoothing to the raw image before correction
-            raw_image_to_correct = raw_data_for_pos[first_degree_pos_raw][0].astype(np.float32)
-            if self.sigma > 0:
-                raw_image_to_correct = gaussian_filter(raw_image_to_correct, sigma=self.sigma)
-            print("Raw image selected and pre-processed successfully.")
-
-            # 2. Compute Averaged Dark Frame (D_ij)
-            print(f"Retrieving/averaging dark field from filter position '{dark_filter_pos}'...")
-            dark_average_frame = self._get_averaged_image_array(dark_filter_pos)
-            if dark_average_frame is None:
-                print(f"No valid dark images found for '{dark_filter_pos}'. Generating synthetic dark field...")
-                synthetic_dark, _ = generate_synthetic_dark_flat_fields_np(raw_image_to_correct.shape, self.sigma)
-                dark_average_frame = synthetic_dark
-                print("Synthetic Dark Field generated.")
-            else:
-                print("Dark field average retrieved successfully.")
-
-            # 3. Compute Averaged Flat Frame (F_ij)
-            print(f"Retrieving/averaging flat field from filter position '{flat_filter_pos}'...")
-            flat_average_frame = self._get_averaged_image_array(flat_filter_pos)
-            if flat_average_frame is None:
-                print(f"No valid flat images found for '{flat_filter_pos}'. Generating synthetic flat field...")
-                _, synthetic_flat = generate_synthetic_dark_flat_fields_np(raw_image_to_correct.shape, self.sigma)
-                flat_average_frame = synthetic_flat
-                print("Synthetic Flat Field generated.")
-            else:
-                print("Flat field average retrieved successfully.")
-
-            # Ensure all relevant arrays are float32 for consistent calculations
-            dark_average_frame = dark_average_frame.astype(np.float32)
-            flat_average_frame = flat_average_frame.astype(np.float32)
-
-            # 4. Perform the combined dark and flat field correction
-            print("Performing flat field correction using combined formula...")
-            corrected_image_array = perform_correction_np(
-                R=raw_image_to_correct,
-                D_avg=dark_average_frame,
-                F_avg=flat_average_frame
-            )
-            print("Flat field correction complete.")
-
-            return corrected_image_array
-
-        except ValueError as e:
-            print(f"Error during processing: {e}")
-            print("Please check filter positions and ensure image data exists in the specified directories.")
-            return None
-        except Exception as e:
-            print(f"An unexpected error occurred during processing: {e}")
-            return None
-        finally:
-            print("-" * 30)
-            print("Flat Field Correction process finished.")
-
-
-#----------------------------------------------------------------------------
-#-- Main CLI Execution (Updated to use FlatfieldProcessor Class)
-#----------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Perform Flat Field Correction on images using ImageProcessor for data loading.\n\n"
-                    "This script implements the combined dark current and flat field correction\n"
-                    "as described in Equation 1 of the provided AMT paper.",
-        formatter_class=argparse.RawTextHelpFormatter
-    )
-
-    # Change image_data_root_dir to be an optional argument, with a default from Constants.py
-    parser.add_argument(
-        "--image_data_root_dir", # Changed from positional to optional argument (with '--' prefix)
-        default=directory_dict["crossTrack"], # Default to 'crossTrack' directory from Constants.py
-        help="Root directory containing all image data (raw, dark, flat).\n"
-             "Defaults to the 'crossTrack' path defined in Constants.py if not provided.\n"
-             "Expected structure: root_dir/[filter_pos]/[degree_pos]/image.tif"
-    )
-
-    # Required arguments for filter positions (these still need to be explicitly provided
-    # unless you want to map them via Constants.py 'wheel_pos' keys like in Main.py)
-    parser.add_argument(
-        "--raw_filter_pos",
-        required=True,
-        help="Filter position for the Raw Image(s) to be corrected (R).\n"
-             "The script will use the first image found in the first degree position."
-    )
-    parser.add_argument(
-        "--dark_filter_pos",
-        required=True,
-        help="Filter position for the Dark Field Image(s) (D).\n"
-             "All images found here will be averaged to create the D_avg frame."
-    )
-    parser.add_argument(
-        "--flat_filter_pos",
-        required=True,
-        help="Filter position for the Flat Field Image(s) (F).\n"
-             "All images found here will be averaged to create the F_avg frame."
-    )
-
-    # Optional argument for output path
-    parser.add_argument(
-        "--output_path",
-        help="Path to save the Corrected Image (C).\n"
-             "Defaults to 'corrected_image.png' in the current directory.",
-        default="corrected_image.png"
-    )
-
-    # Optional argument for gaussian sigma
-    parser.add_argument(
-        "--sigma",
-        type=float,
-        default=1.0,
-        help="Standard deviation for Gaussian smoothing applied to all loaded/generated images\n"
-             "(raw, dark, flat). Set to 0 to disable smoothing. Default: 1.0",
-    )
-
-    args = parser.parse_args()
-
-    try:
-        # Initialize the FlatfieldProcessor, which in turn initializes ImageProcessor
-        # and triggers the initial loading of all image data.
-        processor = FlatfieldProcessor(args.image_data_root_dir, args.sigma)
-
-        # Perform correction using the new class instance
-        corrected_img = processor.process_flatfield_correction(
-            raw_filter_pos=args.raw_filter_pos,
-            dark_filter_pos=args.dark_filter_pos,
-            flat_filter_pos=args.flat_filter_pos
-        )
-
-        if corrected_img is not None:
-            # Save Corrected Image
-            print(f"Saving corrected image to {args.output_path}...")
-            save_image_from_array(corrected_img, args.output_path)
-            print(f"Corrected image saved successfully to {args.output_path}")
-            
-        corrected_image = processor.process_flatfield_correction(
-            raw_filter_pos=args.raw_filter_pos,
-            dark_filter_pos=args.dark_filter_pos,
-            flat_filter_pos=args.flat_filter_pos
-        )
+        return constant + linear * x + quadratic * (x**2)
         
-        if corrected_img is not None:
-            print(f"Saving corrected image to {args.output_path}...")
-            save_image_from_array(corrected_img, args.output_path)
-            print(f"Corrected image saved successfully to {args.output_path}")
+    def quadratic_fit(self, x_vals, y_vals):
+        """
+        Fits a quadratic curve (parabola) to the given x and y values using non-linear least squares,
+        specifically using the `parabola_func` as the model. It also calculates and prints the
+        standard errors of the fitted parameters
 
-    except Exception as e:
-        print(f"An error occurred during main execution: {e}")
+        :param x_vals: np.ndarray, the array of independent variable (x) values.
+        :param y_vals: np.ndarray, the array of dependent variable (y) values to which the parabola will be fitted.
+        :return: tuple of (x_vals, y_fit, popt), where x_vals are the original x-values (after removing NaNs), y_fit
+                 are the corresponding y-values of the fitted parabolic curve, and popt are the optimal parameters.
+        """
+        # Remove NaN values from x_vals and y_vals
+        valid_indices = ~np.isnan(y_vals) # Creates a boolean array indicating indices where y_vals are not NaN.
+        x_vals_clean = x_vals[valid_indices] # Filters x_vals to keep only values at valid indices.
+        y_vals_clean = y_vals[valid_indices] # Filters y_vals to remove NaN values.
 
-    print("-" * 30)
-    print("Flat Field Correction script finished.")
+        if len(x_vals_clean) < 3:  # Need at least three points for quadratic fitting
+            print("Not enough valid data for quadratic fitting. Returning default coefficients.")
+            # Return x_vals_clean, a placeholder for y_fit, and default popt
+            return x_vals_clean, np.zeros_like(x_vals_clean), np.array([0.0, 0.0, 0.0])
+
+        # Perform the least-squares fitting
+        popt, pcov = curve_fit(self.parabola_func, x_vals_clean, y_vals_clean) # Uses the `curve_fit` function from scipy.optimize to find the optimal parameters (constant, linear, quadratic) that minimize the sum of the squares of the residuals between y_vals and the parabola defined by parabola_func. `popt` contains the fitted parameters, and `pcov` contains the estimated covariance of popt.
+        self.constant = popt[0] # Extracts the fitted constant term.
+        self.linear = popt[1] # Extracts the fitted linear term.
+        self.quadratic = popt[2] # Extracts the fitted quadratic term.
+        self.constant_err = np.sqrt(pcov[0][0]) # Calculates the standard error of the constant term from the covariance matrix.
+        self.linear_err = np.sqrt(pcov[1][1]) # Calculates the standard error of the linear term.
+        self.quadratic_err = np.sqrt(pcov[2][2]) # Calculates the standard error of the quadratic term.
+
+        y_fit = self.parabola_func(x_vals_clean, *popt) # Calculates the y-values of the fitted parabola using the original (cleaned) x_vals and the fitted parameters.
+
+        # # Report values to shell
+        # print(f"constant = {self.constant:.7f} ohm") # Prints the fitted constant value with 7 decimal places and its unit.
+        # print(f"constant std. error = {self.constant_err:.7f} ohm") # Prints the standard error of the constant term.
+        # print(f"linear = {self.linear:.2E} ohm/T") # Prints the fitted linear coefficient in scientific notation with 2 decimal places and its unit.
+        # print(f"linear std. error = {self.linear_err:.2E} ohm/T") # Prints the standard error of the linear term.
+        # print(f"quadratic = {self.quadratic:.4E} ohm/T^2") # Prints the fitted quadratic coefficient in scientific notation with 4 decimal places and its unit.
+        # print(f"quadratic std. error = {self.quadratic_err:.2E} ohm/T^2") # Prints the standard error of the quadratic term.
+
+        return x_vals_clean, y_fit, popt # Returns the original x-values (cleaned) and the corresponding fitted y-values, and popt.
+    
+    def generate_quadratic_envelope_flatfield(self, smoothing_sigma=None):
+        """
+        Generate a 2D flatfield correction array based on the quadratic envelope fit
+        to the mean cross-track profile of the composite image.
+        """
+        composite_image = self.crossTrack_processor.generate_composite(self.cross_filter_pos, self.cross_dark_pos) +\
+            self.alongTrack_processor.generate_composite(self.along_filter_pos, self.along_dark_pos)
+            
+        if composite_image is None:
+            print("No composite image available.")
+            return None
+        
+        # Applies Gaussian smoothing to the composite_image if a positive sigma is provided.
+        if smoothing_sigma is not None and smoothing_sigma > 0:
+            composite_image = gaussian_filter(composite_image, sigma=smoothing_sigma)
+            
+        # Compute the mean cross-track profile (average over rows)
+        mean_profile = np.mean(composite_image, axis=0)
+        x_vals = np.arange(mean_profile.size)
+        
+        # Fit quadratic envelope
+        _, _, popt_coeffs = self.quadratic_fit(x_vals, mean_profile)
+        envelope_1d = self.parabola_func(x_vals, *popt_coeffs) # Calculate the envelope using the fitted coefficients.
+        
+        # Expand to 2D by repeating the envelope for each row
+        envelope_2d = np.tile(envelope_1d, (composite_image.shape[0], 1)) # Creates a 2D array by repeating the 1D envelope across all rows of the composite image.
+        
+        # Normalize the envelope to mean 1 for proper correction
+        envelope_2d /= np.mean(envelope_2d)
+        
+        # plot the envelope flatfield
+        plot_composite(envelope_2d)
+        
+        return envelope_2d # Returns the 2D composite_image correction array
+    
+    def characterize_pixel_response(self, smoothing_sigma=None, save_path=flatfield_save_path):
+        """
+        Characterize the pixel-to-pixel relative response (flatfield) using composite images.
+        This can be applied to raw images in the future.
+        """
+        # Generate composite images for both directions
+        cross_composite = self.crossTrack_processor.generate_composite(self.cross_filter_pos, self.cross_dark_pos)
+        along_composite = self.alongTrack_processor.generate_composite(self.along_filter_pos, self.along_dark_pos)
+        if cross_composite is None or along_composite is None:
+            print("Could not generate composite images for flatfield characterization.")
+            return None
+
+        # Combine (mean or sum) the composites
+        flatfield = (cross_composite + along_composite) / 2.0
+        print("[Flatfield] Composite images combined.")
+
+        # Optional smoothing
+        if smoothing_sigma is not None and smoothing_sigma > 0:
+            flatfield = gaussian_filter(flatfield, sigma=smoothing_sigma)
+            print(f"[Flatfield] Applied Gaussian smoothing (sigma={smoothing_sigma}).")
+
+        # Normalize to mean 1
+        flatfield /= np.mean(flatfield)
+        print("[Flatfield] Normalized flatfield to mean 1.")
+        
+        # Defective Pixel Handling
+        mean = np.mean(flatfield)
+        std = np.std(flatfield)
+        defect_mask = (flatfield < mean - 3*std) | (flatfield > mean + 3*std)
+        flatfield[defect_mask] = median_filter(flatfield, size=3)[defect_mask]
+        print(f"[Flatfield] Defective pixels replaced: {np.sum(defect_mask)}")
+        
+        # Metadata
+        metadata = {
+            "date": datetime.datetime.now().isoformat(),
+            "cross_filter_pos": self.cross_filter_pos,
+            "cross_dark_pos": self.cross_dark_pos,
+            "along_filter_pos": self.along_filter_pos,
+            "along_dark_pos": self.along_dark_pos,
+            "smoothing_sigma": smoothing_sigma,
+            "shape": flatfield.shape,
+            "mean": float(np.mean(flatfield)),
+            "std": float(np.std(flatfield)),
+        }
+
+        # Save for future use
+        np.save(save_path, flatfield)
+        print(f"Flatfield characterization saved to {save_path}")
+
+        # Optionally plot
+        plot_composite(flatfield)
+
+        return flatfield
+    
+    def apply_flatfield_to_raw(self, raw_image, flatfield_path, dark_frame):
+        """
+        Apply saved flatfield correction to a raw image.
+        Args:
+            raw_image: 2D np.ndarray, the raw image to correct
+            flatfield_path: str, path to .npz file with flatfield and metadata
+            dark_frame: 2D np.ndarray, dark frame to subtract
+        Returns:
+            corrected_image: 2D np.ndarray, flatfield-corrected image
+            metadata: dict, metadata loaded from flatfield file
+        """
+        data = np.load(flatfield_path)
+        flatfield = data['flatfield']
+        metadata = json.loads(data['metadata'].item())
+
+        print(f"[Flatfield] Applying flatfield correction using file: {flatfield_path}")
+        print(f"[Flatfield] Flatfield metadata: {metadata}")
+
+        # Subtract dark frame
+        corrected = raw_image.astype(np.float32) - dark_frame.astype(np.float32)
+        # Avoid division by zero
+        flatfield = np.where(flatfield == 0, 1, flatfield)
+        # Apply correction
+        corrected /= flatfield
+        # Clip to valid range if needed
+        corrected = np.clip(corrected, 0, 2**14 - 1)
+        return corrected.astype(np.uint16), metadata
