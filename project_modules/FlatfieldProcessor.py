@@ -198,51 +198,79 @@ class FlatfieldProcessor:
         ax.plot(x_vals, combined_profile, 'x', color='red', label="Combined Profile (raw)", linewidth=1.5, markersize=2.75)
         ax.plot(x_vals_filtered, profile_filtered, '.', color='green', label=f"Filtered ({num_sigma}-sigma)", linewidth=1.5)
         ax.plot(x_vals_filtered, profile_smoothed, color='black', label="Smoothed", linewidth=1.5)
-        ax.set_title(f"Extracted Profile ({direction}-track) at pos={pos}")
+
+        # Quadratic envelope fit and plot
+        _, _, popt_coeffs = self.quadratic_fit(x_vals_filtered, profile_smoothed)
+        envelope = self.parabola_func(x_vals_filtered, *popt_coeffs)
+        ax.plot(x_vals_filtered, envelope, color='red', label="Envelope, O(x^2)", linewidth=1.5)
+
+        if direction == "cross":
+            ax.set_title(f"Extracted Profile ({direction}-track row) at pos={pos}")
+        if direction == "along":
+            ax.set_title(f"Extracted Profile ({direction}-track column) at pos={pos}")
         ax.set_xlabel("Pixel Index")
         ax.set_ylabel("Signal (DN)")
         ax.grid(True, linestyle="--", alpha=0.5)
         ax.legend()
         plt.show()
-        
+
         return x_vals_filtered, profile_smoothed
     
-    def generate_quadratic_envelope_flatfield(self, pos=600, direction="cross", avg_window=10, num_sigma=2.0, window_length=61, polyorder=3, smoothing_sigma=None):
+    def generate_quadratic_envelope_flatfield(self, pos_cross=526, pos_along=685, avg_window=10, num_sigma=2.0, window_length=61, polyorder=3, smoothing_sigma=None):
         """
         Generate a 2D flatfield correction array based on the quadratic envelope fit
-        to the mean profile of the composite image.
-        """
-        # Use the same images as plot_flatfield
-        images = self.crossTrack_processor.generate_images(self.cross_filter_pos, self.cross_dark_pos)
-        if not images:
-            print("No images available for quadratic envelope flatfield.")
-            return None
+        to the mean profile of the composite image, using both cross-track and along-track directions.
 
-        x_vals, profile = self.extract_profile(
-            images, pos, direction=direction, avg_window=avg_window,
+        This method models large-scale illumination gradients (such as vignetting) by:
+        - Extracting 1D signal profiles in both cross-track and along-track directions.
+        - Fitting a quadratic (parabolic) curve to each profile.
+        - Expanding each 1D quadratic fit into a 2D array (one for cross, one for along).
+        - Combining the two 2D arrays (by averaging) to form the final envelope.
+        - Normalizing the envelope so its mean is 1.
+        - Optionally smoothing the envelope to suppress noise.
+        - Returning the 2D envelope, which can be used as a flatfield correction surface.
+        """
+
+        # Cross-track envelope
+        images_cross = self.crossTrack_processor.generate_images(self.cross_filter_pos, self.cross_dark_pos)
+        # Extract a 1D profile by averaging over a window of rows centered at pos_cross.
+        x_vals_cross, profile_cross = self.extract_profile(
+            images_cross, pos_cross, direction="cross", avg_window=avg_window,
             num_sigma=num_sigma, window_length=window_length, polyorder=polyorder
         )
-        if x_vals is None or profile is None:
-            print("Could not extract profile for quadratic envelope.")
-            return None
+        # Fit a quadratic curve to the cross-track profile.
+        _, _, popt_cross = self.quadratic_fit(x_vals_cross, profile_cross)
+        # Evaluate the fitted quadratic across the full cross-track axis (width of image).
+        envelope_cross = self.parabola_func(np.arange(images_cross[0].shape[1]), *popt_cross)
+        # Tile the 1D envelope across all rows to create a 2D array.
+        envelope_cross_2d = np.tile(envelope_cross, (images_cross[0].shape[0], 1))
 
-        # Fit quadratic envelope
-        _, _, popt_coeffs = self.quadratic_fit(x_vals, profile)
-        envelope_1d = self.parabola_func(np.arange(images[0].shape[1 if direction == "cross" else 0]), *popt_coeffs)
+        # Along-track envelope
+        images_along = self.alongTrack_processor.generate_images(self.along_filter_pos, self.along_dark_pos)
+        # Extract a 1D profile by averaging over a window of columns centered at pos_along.
+        x_vals_along, profile_along = self.extract_profile(
+            images_along, pos_along, direction="along", avg_window=avg_window,
+            num_sigma=num_sigma, window_length=window_length, polyorder=polyorder
+        )
+        # Fit a quadratic curve to the along-track profile.
+        _, _, popt_along = self.quadratic_fit(x_vals_along, profile_along)
+        # Evaluate the fitted quadratic across the full along-track axis (height of image).
+        envelope_along = self.parabola_func(np.arange(images_along[0].shape[0]), *popt_along)
+        # Tile the 1D envelope across all columns to create a 2D array.
+        envelope_along_2d = np.tile(envelope_along[:, np.newaxis], (1, images_along[0].shape[1]))
 
-        # Expand to 2D
-        if direction == "cross":
-            envelope_2d = np.tile(envelope_1d, (images[0].shape[0], 1))
-        else:
-            envelope_2d = np.tile(envelope_1d[:, np.newaxis], (1, images[0].shape[1]))
+        # Combine the two 2D envelopes
+        envelope_2d = (envelope_cross_2d + envelope_along_2d) / 2.0
 
-        # Normalize
+        # Normalize the envelope
+        # Scale the envelope so its mean value is 1 (preserves overall image brightness after correction).
         envelope_2d /= np.mean(envelope_2d)
 
-        # Optional smoothing
+        # Apply a Gaussian filter to further suppress noise.
         if smoothing_sigma is not None and smoothing_sigma > 0:
             envelope_2d = gaussian_filter(envelope_2d, sigma=smoothing_sigma)
 
+        # for visual inspection
         plot_composite(envelope_2d)
         return envelope_2d
 
@@ -267,12 +295,10 @@ class FlatfieldProcessor:
         if smoothing_sigma is not None and smoothing_sigma > 0:
             flatfield = gaussian_filter(flatfield, sigma=smoothing_sigma)
             print(f"[Flatfield] Applied Gaussian smoothing (sigma={smoothing_sigma}).")
-            plot_composite(flatfield)
 
         # Normalize to mean 1
         flatfield /= np.mean(flatfield)
         print("[Flatfield] Normalized flatfield to mean 1.")
-        plot_composite(flatfield)
         
         # Defective Pixel Handling
         mean = np.mean(flatfield)
