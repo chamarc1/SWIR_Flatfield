@@ -115,4 +115,4 @@ corrected_image, metadata = flatfield_processor.apply_flatfield_to_raw(raw_image
 
 ## Contributing
 
-Contact Charlemagne Marc (chamarc1@umbc.edu) for any contriubtion inquiries.
+Contact Charlemagne Marc (email: chamarc1@umbc.edu) for any contriubtion inquiries.
