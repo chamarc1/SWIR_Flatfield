@@ -204,10 +204,7 @@ class FlatfieldProcessor:
         envelope = self.parabola_func(x_vals_filtered, *popt_coeffs)
         ax.plot(x_vals_filtered, envelope, color='red', label="Envelope, O(x^2)", linewidth=1.5)
 
-        if direction == "cross":
-            ax.set_title(f"Extracted Profile ({direction}-track row) at pos={pos}")
-        if direction == "along":
-            ax.set_title(f"Extracted Profile ({direction}-track column) at pos={pos}")
+        ax.set_title(f"Extracted Profile ({direction}-track line cut) at pos={pos}")
         ax.set_xlabel("Pixel Index")
         ax.set_ylabel("Signal (DN)")
         ax.grid(True, linestyle="--", alpha=0.5)
@@ -356,3 +353,26 @@ class FlatfieldProcessor:
         # Clip to valid range if needed
         corrected = np.clip(corrected, 0, 2**14 - 1)
         return corrected.astype(np.uint16), metadata
+    
+    def apply_quadratic_envelope_to_raw(self, raw_image, envelope_path, dark_frame):
+        """
+        Apply a saved quadratic envelope flatfield correction to a raw image.
+        Args:
+            raw_image: 2D np.ndarray, the raw image to correct
+            envelope_path: str, path to .npy file with the quadratic envelope flatfield
+            dark_frame: 2D np.ndarray, dark frame to subtract
+        Returns:
+            corrected_image: 2D np.ndarray, envelope-corrected image
+        """
+        envelope_2d = np.load(envelope_path)
+        print(f"[Flatfield] Applying quadratic envelope correction using file: {envelope_path}")
+
+        # Subtract dark frame
+        corrected = raw_image.astype(np.float32) - dark_frame.astype(np.float32)
+        # Avoid division by zero
+        envelope_2d = np.where(envelope_2d == 0, 1, envelope_2d)
+        # Apply envelope correction
+        corrected /= envelope_2d
+        # Clip to valid range if needed (e.g., 14-bit data)
+        corrected = np.clip(corrected, 0, 2**14 - 1)
+        return corrected.astype(np.uint16)
