@@ -54,8 +54,8 @@ class FlatfieldProcessor:
         Initializes the FlatfieldProcessor. This class coordinates the loading of
         images via ImageProcessor and applies flat field correction.
         """
-        self.crossTrack_processor = CompositeProcessor(directory_dict["crossTrack"], directory_dict["metadata"])
-        self.alongTrack_processor = CompositeProcessor(directory_dict["alongTrack"], directory_dict["metadata"])
+        self.crossTrack_processor = CompositeProcessor(directory_dict["crossTrack"], directory_dict["metadata"]) # x
+        self.alongTrack_processor = CompositeProcessor(directory_dict["alongTrack"], directory_dict["metadata"]) # y
 
         if not wheel_pos.isdigit:
             print("Enter correct wheel pos")
@@ -260,8 +260,8 @@ class FlatfieldProcessor:
         envelope_2d = (envelope_cross_2d + envelope_along_2d) / 2.0
 
         # Normalize the envelope by the optical center (x=685, y=526)
-        center_row = 526
-        center_col = 685
+        center_row = 526 
+        center_col = 685 
         # Ensure indices are within bounds
         center_row = min(max(center_row, 0), envelope_2d.shape[0] - 1)
         center_col = min(max(center_col, 0), envelope_2d.shape[1] - 1)

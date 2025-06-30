@@ -64,27 +64,23 @@ class CompositeProcessor:
         return np.mean(np.asarray(dark_images), axis=0) if dark_images else None # If dark_images is not empty, it converts the list of dark frame images to a NumPy array and calculates the mean along the first axis (averaging all images pixel-wise). If dark_images is empty, it returns None.
 
     def correct_images_with_dark_frame(self, images, dark_frame):
-        """Correct images by subtracting the average dark frame from each image.
+        """Correct images by subtracting the average dark frame from each image, using absolute difference.
 
-        This step aims to reduce the impact of sensor noise and biases present in the dark frame on the actual data images.
-        Clipping the result to the valid data range (0 to 16383 for a 14-bit sensor) ensures that pixel values remain within the sensor's capabilities.
+        For each image, subtract the dark frame, take the absolute value, and return the list of results.
 
         :param images: list of np.ndarray, a list of images (as NumPy arrays) to be corrected.
         :param dark_frame: np.ndarray or None, the average dark frame to subtract. If None, no correction is applied.
         :return: list of np.ndarray, a list of dark frame corrected images as NumPy arrays.
         """
         corrected_images = []
-        for image in images: # Iterates through each image in the input list.
+        for image in images:
             if dark_frame is not None:
-                # Converts both the image and the dark frame to 32-bit integers to prevent overflow during subtraction.
-                # Subtracts the dark frame from the image. Clips the resulting pixel values to the range [0, 16383] (for a 14-bit sensor: 2^14 - 1).
-                # Converts the clipped result back to 16-bit unsigned integers (uint16) to maintain a common data type,
-                # If dark_frame is None, the original image is kept without correction.
-                corrected_image = np.clip(image.astype(np.int32) - dark_frame.astype(np.int32), 0, 2**14 - 1).astype(np.uint16)
+                # Subtract dark frame, take absolute value, clip to valid range, and cast to uint16
+                corrected_image = np.abs(image.astype(np.int32) - dark_frame.astype(np.int32))
+                corrected_image = np.clip(corrected_image, 0, 2**14 - 1).astype(np.uint16)
             else:
-                corrected_image = image # If dark_frame is None, no correction is applied.
-            corrected_images.append(corrected_image) # Appends the corrected image to the list.
-
+                corrected_image = image
+            corrected_images.append(corrected_image)
         return corrected_images
 
     def generate_images(self, filter_pos, dark_pos):
@@ -125,17 +121,20 @@ class CompositeProcessor:
         return all_images
 
     def generate_composite(self, filter_pos, dark_pos):
-        """Generate a composite image by averaging all the dark frame corrected images for a given filter position.
+        """Generate a composite image by averaging the absolute difference between each filter image and its dark frame.
 
-        This process effectively combines multiple images to reduce noise and highlight common features.
+        This implements: (abs[filter_image_1 - dark_image_1] + ... + abs[filter_image_n - dark_image_n]) / n
 
         :param filter_pos: str, the filter position for which to generate the composite image.
         :param dark_pos: str, the filter position used to compute the average dark frame for correction.
-        :return: np.ndarray or None, the composite image as a NumPy array (the average of the corrected images). Returns None if no corrected images are available.
+        :return: np.ndarray or None, the composite image as a NumPy array (the average of the abs-difference images).
         """
         images = self.generate_images(filter_pos, dark_pos)
-        # If the list of corrected images is not empty, it converts it to a NumPy array and calculates the mean along the first axis (averaging all images pixel-wise) to create the composite image. If the list is empty, it returns None.
-        return np.mean(np.asarray(images), axis=0) if images else None
+        if not images:
+            return None
+        # Stack all corrected images and take the mean
+        composite = np.mean(np.stack(images), axis=0)
+        return composite
 
     def plotComposite(self, filter_pos, dark_pos):
         """
@@ -510,7 +509,7 @@ class CompositeProcessor:
 
     #     # Plot the combined data
     #     fig,ax2 = plt.subplots(1,1,num=2) # Creates a new Matplotlib figure and a subplot.
-    #     ax2.plot(x_vals, combined_row, 'x', color='red', label="Rejected Points", linewidth=1.5, markersize=2.75) # Plots the combined row with 'x' markers in red, representing points that were likely filtered out as low signal (NaNs).
+    #     ax2.plot(x_vals, combined_row, 'x', color='red', label="Rejected Points", linewidth=1.5, markersize=2.75 # Plots the combined row with 'x' markers in red, representing points that were likely filtered out as low signal (NaNs).
 
     #     # num_sigma = 1.0
     #     x_vals_filtered, combined_row_filtered = self.sigma_filter(x_vals, combined_row, num_sigma) # Applies the sigma filter to remove outliers from the combined row.
