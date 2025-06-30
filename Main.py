@@ -45,9 +45,6 @@ def main():
     args = parser.parse_args()
     
     try:
-        if not args.wheel_pos.isdigit:
-            print("Enter correct wheel pos")
-            raise ValueError("Invalid input value")
         
         # crossTrack_processor = CompositeProcessor(directory_dict["crossTrack"], directory_dict["metadata"])
         # alongTrack_processor = CompositeProcessor(directory_dict["alongTrack"], directory_dict["metadata"])

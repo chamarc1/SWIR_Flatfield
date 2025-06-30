@@ -26,32 +26,29 @@ directory_dict = {
     }
 
 crossTrack_dict = {
-    "050" : "20250206_FILTPOS_050_INTTIME_02p0",
-    "090" : "20250206_FILTPOS_090_INTTIME_01p5",
-    "130" : "20250206_FILTPOS_130_INTTIME_02p0",
-    "169" : "20250206_FILTPOS_169_INTTIME_00p2"
+    "pos1" : "20250206_FILTPOS_050_INTTIME_02p0", # pos1 = 050 = 1.57um
+    "pos2" : "20250206_FILTPOS_090_INTTIME_01p5", # pos2 = 090 = 1.55um
+    "pos3" : "20250206_FILTPOS_130_INTTIME_02p0", # pos3 = 130 = 1.38um
+    "pos4" : "20250206_FILTPOS_169_INTTIME_00p2"  # pos4 = 169 = OPEN
 }
 
 crossTrackDark_dict = {
-    "050" : "20250206_FILTPOS_010_INTTIME_02p0",
-    "090" : "20250206_FILTPOS_010_INTTIME_01p5",
-    "130" : "20250206_FILTPOS_130_INTTIME_02p0",
-    "169" : "20250206_FILTPOS_010_INTTIME_00p2"
+    "pos1" : "20250206_FILTPOS_010_INTTIME_02p0", # corresponding dark folder for 02p0 integration time
+    "pos2" : "20250206_FILTPOS_010_INTTIME_01p5", # corresponding dark folder for 01p5 integration time
+    "pos3" : "20250206_FILTPOS_130_INTTIME_02p0", # corresponding dark folder for 02p0 integration time
+    "pos4" : "20250206_FILTPOS_010_INTTIME_00p2"  # corresponding dark folder for 00p2 integration time
 }
 
 alongTrack_dict = {
-    "050" : "20250205_FILTPOS_050_INTTIME_02p0",
-    "090" : "20250205_FILTPOS_090_INTTIME_01p5",
-    "130" : "20250205_FILTPOS_130_INTTIME_02p0" ,
-    "169" : "20250205_FILTPOS_169_INTTIME_00p2",
-    "02p0" : "20250205_FILTPOS_010_INTTIME_02p0",
-    "01p5" : "20250205_FILTPOS_010_INTTIME_01p5",
-    "00p2" : "20250205_FILTPOS_010_INTTIME_00p2"
+    "pos1" : "20250205_FILTPOS_050_INTTIME_02p0",  # pos1 = 050 = 1.57um
+    "pos2" : "20250205_FILTPOS_090_INTTIME_01p5",  # pos3 = 130 = 1.38um
+    "pos3" : "20250205_FILTPOS_130_INTTIME_02p0",  # pos3 = 130 = 1.38um
+    "pos4" : "20250205_FILTPOS_169_INTTIME_00p2",  # pos4 = 169 = OPEN
 }
 
 alongTrackDark_dict = {
-    "050" : "20250205_FILTPOS_010_INTTIME_02p0",
-    "090" : "20250205_FILTPOS_010_INTTIME_01p5",
-    "130" : "20250205_FILTPOS_010_INTTIME_02p0",
-    "169" : "20250205_FILTPOS_010_INTTIME_00p2"
+    "pos1" : "20250205_FILTPOS_010_INTTIME_02p0", # corresponding dark folder for 02p0 integration time
+    "pos2" : "20250205_FILTPOS_010_INTTIME_01p5", # corresponding dark folder for 01p5 integration time
+    "pos3" : "20250205_FILTPOS_010_INTTIME_02p0", # corresponding dark folder for 02p0 integration time
+    "pos4" : "20250205_FILTPOS_010_INTTIME_00p2"  # corresponding dark folder for 00p2 integration time
 }

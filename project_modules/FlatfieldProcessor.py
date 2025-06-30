@@ -170,10 +170,11 @@ class FlatfieldProcessor:
             else:
                 raise ValueError("direction must be 'cross' or 'along'")
             
-            # Filter out low-signal regions
-            for i in range(profile.shape[0]):
-                if profile[i] < np.nanmax(profile) / 2.0:
-                    profile[i] = np.nan
+            # Filter out low-signal regions below Half_Max
+            # for i in range(profile.shape[0]):
+            #     if profile[i] < np.nanmax(profile) / 2.0:
+            #         profile[i] = np.nan
+            profile[profile < np.nanmax(profile) / 2.0] = np.nan
 
             avg_profiles.append(profile)
             
@@ -193,7 +194,6 @@ class FlatfieldProcessor:
         profile_smoothed = savgol_filter(profile_filtered, window_length=window_length, polyorder=polyorder)
         
         # Plotting section
-        import matplotlib.pyplot as plt
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.plot(x_vals, combined_profile, 'x', color='red', label="Combined Profile (raw)", linewidth=1.5, markersize=2.75)
         ax.plot(x_vals_filtered, profile_filtered, '.', color='green', label=f"Filtered ({num_sigma}-sigma)", linewidth=1.5)
@@ -259,9 +259,16 @@ class FlatfieldProcessor:
         # Combine the two 2D envelopes
         envelope_2d = (envelope_cross_2d + envelope_along_2d) / 2.0
 
-        # Normalize the envelope
-        # Scale the envelope so its mean value is 1 (preserves overall image brightness after correction).
-        envelope_2d /= np.mean(envelope_2d)
+        # Normalize the envelope by the optical center (x=685, y=526)
+        center_row = 526
+        center_col = 685
+        # Ensure indices are within bounds
+        center_row = min(max(center_row, 0), envelope_2d.shape[0] - 1)
+        center_col = min(max(center_col, 0), envelope_2d.shape[1] - 1)
+        optical_center_value = envelope_2d[center_row, center_col]
+        if optical_center_value == 0:
+            optical_center_value = 1  # Prevent division by zero
+        envelope_2d /= optical_center_value  # Normalize by optical center
 
         # Apply a Gaussian filter to further suppress noise.
         if smoothing_sigma is not None and smoothing_sigma > 0:
