@@ -21,7 +21,7 @@ from scipy.signal import savgol_filter# A signal processing tool for smoothing d
 from scipy.optimize import curve_fit  # Provides functions to use non-linear least squares to fit a function (like a parabola) to data.
 from project_modules.ImageProcessor import ImageProcessor # Imports the ImageProcessor class from a local module, likely used for loading and basic processing of individual images.
 from project_modules.Constants import composite_save_path, parabola_save_path, flatfield_save_path, flatfield_plot_save_path # Imports predefined file paths for saving generated plots from a local Constants module.
-from project_modules.Constants import directory_dict, crossTrack_dict, crossTrackDark_dict, alongTrack_dict, alongTrackDark_dict
+from project_modules.Constants import directory_dict, crossTrack_dict, crossTrackDark_dict, alongTrack_dict, alongTrackDark_dict, parabola_func
 
 #----------------------------------------------------------------------------
 #-- GLOBALS
@@ -282,19 +282,19 @@ class CompositeProcessor:
         plt.savefig(parabola_save_path)
         plt.show()
 
-    def parabola_func(self, x, constant, linear, quadratic):
-        """
-        Defines a parabolic function (quadratic polynomial).
+    # def parabola_func(self, x, constant, linear, quadratic):
+    #     """
+    #     Defines a parabolic function (quadratic polynomial).
 
-        This function is used as the model for fitting a parabola to data points.
+    #     This function is used as the model for fitting a parabola to data points.
 
-        :param x: float or np.ndarray, the independent variable(s) at which to evaluate the parabola.
-        :param constant: float, the y-intercept (constant term) of the parabola.
-        :param linear: float, the coefficient of the linear term (the slope at x=0 if quadratic is zero).
-        :param quadratic: float, the coefficient of the quadratic term (determines the curvature of the parabola).
-        :return: float or np.ndarray, the calculated y-value(s) of the parabola for the given x value(s).
-        """
-        return constant + linear * x + quadratic * (x**2)
+    #     :param x: float or np.ndarray, the independent variable(s) at which to evaluate the parabola.
+    #     :param constant: float, the y-intercept (constant term) of the parabola.
+    #     :param linear: float, the coefficient of the linear term (the slope at x=0 if quadratic is zero).
+    #     :param quadratic: float, the coefficient of the quadratic term (determines the curvature of the parabola).
+    #     :return: float or np.ndarray, the calculated y-value(s) of the parabola for the given x value(s).
+    #     """
+    #     return constant + linear * x + quadratic * (x**2)
 
     def quadratic_fit(self, x_vals, y_vals):
         """
@@ -318,7 +318,7 @@ class CompositeProcessor:
             return x_vals_clean, np.zeros_like(x_vals_clean), np.array([0.0, 0.0, 0.0])
 
         # Perform the least-squares fitting
-        popt, pcov = curve_fit(self.parabola_func, x_vals_clean, y_vals_clean) # Uses the `curve_fit` function from scipy.optimize to find the optimal parameters (constant, linear, quadratic) that minimize the sum of the squares of the residuals between y_vals and the parabola defined by parabola_func. `popt` contains the fitted parameters, and `pcov` contains the estimated covariance of popt.
+        popt, pcov = curve_fit(parabola_func, x_vals_clean, y_vals_clean) # Uses the `curve_fit` function from scipy.optimize to find the optimal parameters (constant, linear, quadratic) that minimize the sum of the squares of the residuals between y_vals and the parabola defined by parabola_func. `popt` contains the fitted parameters, and `pcov` contains the estimated covariance of popt.
         self.constant = popt[0] # Extracts the fitted constant term.
         self.linear = popt[1] # Extracts the fitted linear term.
         self.quadratic = popt[2] # Extracts the fitted quadratic term.
@@ -326,7 +326,7 @@ class CompositeProcessor:
         self.linear_err = np.sqrt(pcov[1][1]) # Calculates the standard error of the linear term.
         self.quadratic_err = np.sqrt(pcov[2][2]) # Calculates the standard error of the quadratic term.
 
-        y_fit = self.parabola_func(x_vals_clean, *popt) # Calculates the y-values of the fitted parabola using the original (cleaned) x_vals and the fitted parameters.
+        y_fit = parabola_func(x_vals_clean, *popt) # Calculates the y-values of the fitted parabola using the original (cleaned) x_vals and the fitted parameters.
 
         # # Report values to shell
         # print(f"constant = {self.constant:.7f} ohm") # Prints the fitted constant value with 7 decimal places and its unit.

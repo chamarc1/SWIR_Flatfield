@@ -22,7 +22,7 @@ from scipy.signal import savgol_filter
 from scipy.optimize import curve_fit  # Provides functions to use non-linear least squares to fit a function (like a parabola) to data.
 import matplotlib.pyplot as plt
 from project_modules.CompositeProcessor import CompositeProcessor
-from project_modules.Constants import flatfield_save_path, composite_save_path
+from project_modules.Constants import flatfield_save_path, composite_save_path, parabola_func
 from project_modules.Constants import directory_dict, crossTrack_dict, crossTrackDark_dict, alongTrack_dict, alongTrackDark_dict
 
 #----------------------------------------------------------------------------
@@ -72,19 +72,19 @@ class FlatfieldProcessor:
         self.along_filter_pos = alongTrack_dict[wheel_pos]
         self.along_dark_pos = alongTrackDark_dict[wheel_pos]
     
-    def parabola_func(self, x, constant, linear, quadratic):
-        """
-        Defines a parabolic function (quadratic polynomial).
+    # def parabola_func(self, x, constant, linear, quadratic):
+    #     """
+    #     Defines a parabolic function (quadratic polynomial).
 
-        This function is used as the model for fitting a parabola to data points.
+    #     This function is used as the model for fitting a parabola to data points.
 
-        :param x: float or np.ndarray, the independent variable(s) at which to evaluate the parabola.
-        :param constant: float, the y-intercept (constant term) of the parabola.
-        :param linear: float, the coefficient of the linear term (the slope at x=0 if quadratic is zero).
-        :param quadratic: float, the coefficient of the quadratic term (determines the curvature of the parabola).
-        :return: float or np.ndarray, the calculated y-value(s) of the parabola for the given x value(s).
-        """
-        return constant + linear * x + quadratic * (x**2)
+    #     :param x: float or np.ndarray, the independent variable(s) at which to evaluate the parabola.
+    #     :param constant: float, the y-intercept (constant term) of the parabola.
+    #     :param linear: float, the coefficient of the linear term (the slope at x=0 if quadratic is zero).
+    #     :param quadratic: float, the coefficient of the quadratic term (determines the curvature of the parabola).
+    #     :return: float or np.ndarray, the calculated y-value(s) of the parabola for the given x value(s).
+    #     """
+    #     return constant + linear * x + quadratic * (x**2)
         
     def quadratic_fit(self, x_vals, y_vals):
         """
@@ -108,7 +108,7 @@ class FlatfieldProcessor:
             return x_vals_clean, np.zeros_like(x_vals_clean), np.array([0.0, 0.0, 0.0])
 
         # Perform the least-squares fitting
-        popt, pcov = curve_fit(self.parabola_func, x_vals_clean, y_vals_clean) # Uses the `curve_fit` function from scipy.optimize to find the optimal parameters (constant, linear, quadratic) that minimize the sum of the squares of the residuals between y_vals and the parabola defined by parabola_func. `popt` contains the fitted parameters, and `pcov` contains the estimated covariance of popt.
+        popt, pcov = curve_fit(parabola_func, x_vals_clean, y_vals_clean) # Uses the `curve_fit` function from scipy.optimize to find the optimal parameters (constant, linear, quadratic) that minimize the sum of the squares of the residuals between y_vals and the parabola defined by parabola_func. `popt` contains the fitted parameters, and `pcov` contains the estimated covariance of popt.
         self.constant = popt[0] # Extracts the fitted constant term.
         self.linear = popt[1] # Extracts the fitted linear term.
         self.quadratic = popt[2] # Extracts the fitted quadratic term.
@@ -116,7 +116,7 @@ class FlatfieldProcessor:
         self.linear_err = np.sqrt(pcov[1][1]) # Calculates the standard error of the linear term.
         self.quadratic_err = np.sqrt(pcov[2][2]) # Calculates the standard error of the quadratic term.
 
-        y_fit = self.parabola_func(x_vals_clean, *popt) # Calculates the y-values of the fitted parabola using the original (cleaned) x_vals and the fitted parameters.
+        y_fit = parabola_func(x_vals_clean, *popt) # Calculates the y-values of the fitted parabola using the original (cleaned) x_vals and the fitted parameters.
 
         # # Report values to shell
         # print(f"constant = {self.constant:.7f} ohm") # Prints the fitted constant value with 7 decimal places and its unit.
@@ -207,7 +207,7 @@ class FlatfieldProcessor:
 
         # Quadratic envelope fit and plot
         _, _, popt_coeffs = self.quadratic_fit(x_vals_filtered, profile_smoothed)
-        envelope = self.parabola_func(x_vals_filtered, *popt_coeffs)
+        envelope = parabola_func(x_vals_filtered, *popt_coeffs)
         ax.plot(x_vals_filtered, envelope, color='red', label="Envelope, O(x^2)", linewidth=1.5)
 
         ax.set_title(f"Extracted Profile ({direction}-track line cut) at pos={pos}")
@@ -244,7 +244,7 @@ class FlatfieldProcessor:
         # Fit a quadratic curve to the cross-track profile.
         _, _, popt_cross = self.quadratic_fit(x_vals_cross, profile_cross)
         # Evaluate the fitted quadratic across the full cross-track axis (width of image).
-        envelope_cross = self.parabola_func(np.arange(images_cross[0].shape[1]), *popt_cross)
+        envelope_cross = parabola_func(np.arange(images_cross[0].shape[1]), *popt_cross)
         # Tile the 1D envelope across all rows to create a 2D array.
         envelope_cross_2d = np.tile(envelope_cross, (images_cross[0].shape[0], 1))
 
@@ -258,7 +258,7 @@ class FlatfieldProcessor:
         # Fit a quadratic curve to the along-track profile.
         _, _, popt_along = self.quadratic_fit(x_vals_along, profile_along)
         # Evaluate the fitted quadratic across the full along-track axis (height of image).
-        envelope_along = self.parabola_func(np.arange(images_along[0].shape[0]), *popt_along)
+        envelope_along = parabola_func(np.arange(images_along[0].shape[0]), *popt_along)
         # Tile the 1D envelope across all columns to create a 2D array.
         envelope_along_2d = np.tile(envelope_along[:, np.newaxis], (1, images_along[0].shape[1]))
 

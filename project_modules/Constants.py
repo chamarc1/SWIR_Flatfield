@@ -52,3 +52,17 @@ alongTrackDark_dict = {
     "pos3" : "20250205_FILTPOS_010_INTTIME_02p0", # corresponding dark folder for 02p0 integration time
     "pos4" : "20250205_FILTPOS_010_INTTIME_00p2"  # corresponding dark folder for 00p2 integration time
 }
+
+def parabola_func(x, constant, linear, quadratic):
+        """
+        Defines a parabolic function (quadratic polynomial).
+
+        This function is used as the model for fitting a parabola to data points.
+
+        :param x: float or np.ndarray, the independent variable(s) at which to evaluate the parabola.
+        :param constant: float, the y-intercept (constant term) of the parabola.
+        :param linear: float, the coefficient of the linear term (the slope at x=0 if quadratic is zero).
+        :param quadratic: float, the coefficient of the quadratic term (determines the curvature of the parabola).
+        :return: float or np.ndarray, the calculated y-value(s) of the parabola for the given x value(s).
+        """
+        return constant + linear * x + quadratic * (x**2)
