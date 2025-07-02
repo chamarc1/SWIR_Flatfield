@@ -26,6 +26,12 @@ from project_modules.Constants import flatfield_save_path, composite_save_path
 from project_modules.Constants import directory_dict, crossTrack_dict, crossTrackDark_dict, alongTrack_dict, alongTrackDark_dict
 
 #----------------------------------------------------------------------------
+#-- GLOBALS
+#----------------------------------------------------------------------------
+OPTICAL_CENTER_X = 526 # optical center coordinates 
+OPTICAL_CENTER_Y = 685 # optical center coordinates
+
+#----------------------------------------------------------------------------
 #-- plot_composite
 #----------------------------------------------------------------------------
 def plot_composite(composite_image):
@@ -263,8 +269,8 @@ class FlatfieldProcessor:
         center_row = 526 
         center_col = 685 
         # Ensure indices are within bounds
-        center_row = min(max(center_row, 0), envelope_2d.shape[0] - 1)
-        center_col = min(max(center_col, 0), envelope_2d.shape[1] - 1)
+        center_row = min(max(OPTICAL_CENTER_X, 0), envelope_2d.shape[0] - 1)
+        center_col = min(max(OPTICAL_CENTER_Y, 0), envelope_2d.shape[1] - 1)
         optical_center_value = envelope_2d[center_row, center_col]
         if optical_center_value == 0:
             optical_center_value = 1  # Prevent division by zero
@@ -275,7 +281,7 @@ class FlatfieldProcessor:
             envelope_2d = gaussian_filter(envelope_2d, sigma=smoothing_sigma)
 
         # for visual inspection
-        plot_composite(envelope_2d)
+        # plot_composite(envelope_2d)
         return envelope_2d
 
     def characterize_pixel_response(self, smoothing_sigma=None, save_path=flatfield_save_path):
