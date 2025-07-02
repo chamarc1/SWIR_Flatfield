@@ -54,10 +54,17 @@ def main():
         along_filter_pos = alongTrack_dict[args.wheel_pos]
         along_dark_pos = alongTrackDark_dict[args.wheel_pos]
 
-        # take the composite image and take the an along-track row
-        # take the array of counts from the row and graph
-        composite_image = crossTrack_processor.generate_composite(cross_filter_pos, cross_dark_pos) +\
-            alongTrack_processor.generate_composite(along_filter_pos, along_dark_pos)  
+        # Choose correction mode: "average" or "pairwise"
+        correction_mode = "pairwise"  # or "average"
+
+        cross_composite = crossTrack_processor.generate_composite(
+            cross_filter_pos, cross_dark_pos, correction_mode=correction_mode
+        )
+        along_composite = alongTrack_processor.generate_composite(
+            along_filter_pos, along_dark_pos, correction_mode=correction_mode
+        )
+
+        composite_image = cross_composite + along_composite
         plot_composite(composite_image)
 
         crossTrack_processor.plotComposite(cross_filter_pos, cross_dark_pos)

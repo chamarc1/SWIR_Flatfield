@@ -19,7 +19,6 @@ import matplotlib as mpl              # A comprehensive library for creating sta
 import matplotlib.pyplot as plt       # A module within Matplotlib that provides a MATLAB-like interface for plotting. Used for displaying images and other plots.
 from scipy.signal import savgol_filter# A signal processing tool for smoothing data using the Savitzky-Golay filter, which fits successive sub-sets of adjacent data points with a low-degree polynomial by linear least squares.
 from scipy.optimize import curve_fit  # Provides functions to use non-linear least squares to fit a function (like a parabola) to data.
-from scipy.ndimage import gaussian_filter # Needed for flat field composite generation
 from project_modules.ImageProcessor import ImageProcessor # Imports the ImageProcessor class from a local module, likely used for loading and basic processing of individual images.
 from project_modules.Constants import composite_save_path, parabola_save_path, flatfield_save_path, flatfield_plot_save_path # Imports predefined file paths for saving generated plots from a local Constants module.
 from project_modules.Constants import directory_dict, crossTrack_dict, crossTrackDark_dict, alongTrack_dict, alongTrackDark_dict
