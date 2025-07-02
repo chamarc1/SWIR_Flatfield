@@ -228,18 +228,7 @@ class CompositeProcessor:
 
     def plot_parabola_cores(self, filter_pos, dark_pos, along_track_pos, smooth=True, core=True, window_length=61, polyorder=3):
         """
-        Generates and plots the core (or FWHM region) of the cross-track signal for each image at a specified Along-Track row.
-
-        This function extracts a cross-track profile (a row or an average of rows) from each corrected image then plots either
-        the identified core or the full profile.
-
-        :param filter_pos: str, the filter position to analyze.
-        :param dark_pos: str, the dark frame filter position used for correction.
-        :param along_track_pos: int, the along-track row index to extract the cross-track signal from each image (averaging a few rows around this index for better signal).
-        :param smooth: bool, whether to apply Savitzky-Golay smoothing to the cross-track signal (default: True).
-        :param core: bool, whether to plot only the identified "core" region (using FWHM calculation here) or the full signal (default: True, plotting the core).
-        :param window_length: int, the window length for the Savitzky-Golay filter (must be odd and greater than polyorder, default: 61).
-        :param polyorder: int, the polynomial order for the Savitzky-Golay filter (default: 3).
+        Plot the core (or full) cross-track signal for each image at a specified along-track row.
         """
         images = self.generate_images(filter_pos, dark_pos)
         if not images:
@@ -248,30 +237,26 @@ class CompositeProcessor:
 
         plt.figure(figsize=(14, 6))
 
-        for idx, image in enumerate(images): # Iterates through each corrected image.
-            # Determine bounds for averaging along-track rows
-            row_start = max(along_track_pos - 10, 0) # Calculates the starting row index for averaging, ensuring it's not below 0.
-            row_end = min(along_track_pos + 10 + 1, image.shape[0]) # Calculates the ending row index for averaging, ensuring it's not beyond the image height and adding 1 to include the upper bound.
-
-            # saftey check
-            if row_start >= row_end: # Checks if the averaging range is valid.
+        for idx, image in enumerate(images):
+            row_start = max(along_track_pos - 10, 0)
+            row_end = min(along_track_pos + 11, image.shape[0])
+            if row_start >= row_end:
                 print(f"Invalid range for image {idx}. Skipping")
                 continue
 
-            averaged_row = np.mean(image[row_start:row_end, :], axis=0) # Averages the pixel values across the selected along-track rows to get a 1D cross-track signal.
-            x_vals = np.arange(len(averaged_row)) # Creates an array of x-axis values (pixel indices) for the cross-track signal.
+            averaged_row = np.mean(image[row_start:row_end, :], axis=0)
+            x_vals = np.arange(len(averaged_row))
 
-            if smooth: # Checks if smoothing is enabled.
-                if window_length >= len(averaged_row): # Adjust if row is too short for the specified window length.
+            if smooth:
+                if window_length >= len(averaged_row):
                     window_length = len(averaged_row) - 1 if len(averaged_row) % 2 == 0 else len(averaged_row)
-                averaged_row = savgol_filter(averaged_row, window_length=window_length, polyorder=polyorder) # Applies the Savitzky-Golay filter to smooth the cross-track signal.
+                averaged_row = savgol_filter(averaged_row, window_length=window_length, polyorder=polyorder)
 
-            if core: # Checks if only the "core" region should be plotted.
+            if core:
                 fwhm_x, fwhm_y = self.calculate_FWHM(x_vals, averaged_row)
-                plt.plot(fwhm_x, fwhm_y, linewidth=2, label=f"Core Image data {idx+1}") # Plots the FWHM region.
-            else: # If the full signal should be plotted.
+                plt.plot(fwhm_x, fwhm_y, linewidth=2, label=f"Core Image {idx+1}")
+            else:
                 plt.plot(x_vals, averaged_row, label=f"Image {idx+1}", linewidth=1.5)
-
 
         plt.title(f"Averaged Along-Track Row {along_track_pos-10} to {along_track_pos+10}")
         plt.xlabel("Cross-Track Pixel Index")
@@ -282,85 +267,43 @@ class CompositeProcessor:
         plt.savefig(parabola_save_path)
         plt.show()
 
-    # def parabola_func(self, x, constant, linear, quadratic):
-    #     """
-    #     Defines a parabolic function (quadratic polynomial).
-
-    #     This function is used as the model for fitting a parabola to data points.
-
-    #     :param x: float or np.ndarray, the independent variable(s) at which to evaluate the parabola.
-    #     :param constant: float, the y-intercept (constant term) of the parabola.
-    #     :param linear: float, the coefficient of the linear term (the slope at x=0 if quadratic is zero).
-    #     :param quadratic: float, the coefficient of the quadratic term (determines the curvature of the parabola).
-    #     :return: float or np.ndarray, the calculated y-value(s) of the parabola for the given x value(s).
-    #     """
-    #     return constant + linear * x + quadratic * (x**2)
-
     def quadratic_fit(self, x_vals, y_vals):
         """
-        Fits a quadratic curve (parabola) to the given x and y values using non-linear least squares,
-        specifically using the `parabola_func` as the model. It also calculates and prints the
-        standard errors of the fitted parameters
-
-        :param x_vals: np.ndarray, the array of independent variable (x) values.
-        :param y_vals: np.ndarray, the array of dependent variable (y) values to which the parabola will be fitted.
-        :return: tuple of (x_vals, y_fit, popt), where x_vals are the original x-values (after removing NaNs), y_fit
-                 are the corresponding y-values of the fitted parabolic curve, and popt are the optimal parameters.
+        Fit a quadratic curve (parabola) to x and y values using non-linear least squares.
+        Returns fitted y-values and optimal parameters.
         """
-        # Remove NaN values from x_vals and y_vals
-        valid_indices = ~np.isnan(y_vals) # Creates a boolean array indicating indices where y_vals are not NaN.
-        x_vals_clean = x_vals[valid_indices] # Filters x_vals to keep only values at valid indices.
-        y_vals_clean = y_vals[valid_indices] # Filters y_vals to remove NaN values.
+        valid_indices = ~np.isnan(y_vals)
+        x_vals_clean = x_vals[valid_indices]
+        y_vals_clean = y_vals[valid_indices]
 
-        if len(x_vals_clean) < 3:  # Need at least three points for quadratic fitting
+        if len(x_vals_clean) < 3:
             print("Not enough valid data for quadratic fitting. Returning default coefficients.")
-            # Return x_vals_clean, a placeholder for y_fit, and default popt
             return x_vals_clean, np.zeros_like(x_vals_clean), np.array([0.0, 0.0, 0.0])
 
-        # Perform the least-squares fitting
-        popt, pcov = curve_fit(parabola_func, x_vals_clean, y_vals_clean) # Uses the `curve_fit` function from scipy.optimize to find the optimal parameters (constant, linear, quadratic) that minimize the sum of the squares of the residuals between y_vals and the parabola defined by parabola_func. `popt` contains the fitted parameters, and `pcov` contains the estimated covariance of popt.
-        self.constant = popt[0] # Extracts the fitted constant term.
-        self.linear = popt[1] # Extracts the fitted linear term.
-        self.quadratic = popt[2] # Extracts the fitted quadratic term.
-        self.constant_err = np.sqrt(pcov[0][0]) # Calculates the standard error of the constant term from the covariance matrix.
-        self.linear_err = np.sqrt(pcov[1][1]) # Calculates the standard error of the linear term.
-        self.quadratic_err = np.sqrt(pcov[2][2]) # Calculates the standard error of the quadratic term.
+        popt, pcov = curve_fit(parabola_func, x_vals_clean, y_vals_clean)
+        self.constant = popt[0]
+        self.linear = popt[1]
+        self.quadratic = popt[2]
+        self.constant_err = np.sqrt(pcov[0][0])
+        self.linear_err = np.sqrt(pcov[1][1])
+        self.quadratic_err = np.sqrt(pcov[2][2])
 
-        y_fit = parabola_func(x_vals_clean, *popt) # Calculates the y-values of the fitted parabola using the original (cleaned) x_vals and the fitted parameters.
-
-        # # Report values to shell
-        # print(f"constant = {self.constant:.7f} ohm") # Prints the fitted constant value with 7 decimal places and its unit.
-        # print(f"constant std. error = {self.constant_err:.7f} ohm") # Prints the standard error of the constant term.
-        # print(f"linear = {self.linear:.2E} ohm/T") # Prints the fitted linear coefficient in scientific notation with 2 decimal places and its unit.
-        # print(f"linear std. error = {self.linear_err:.2E} ohm/T") # Prints the standard error of the linear term.
-        # print(f"quadratic = {self.quadratic:.4E} ohm/T^2") # Prints the fitted quadratic coefficient in scientific notation with 4 decimal places and its unit.
-        # print(f"quadratic std. error = {self.quadratic_err:.2E} ohm/T^2") # Prints the standard error of the quadratic term.
-
-        return x_vals_clean, y_fit, popt # Returns the original x-values (cleaned) and the corresponding fitted y-values, and popt.
+        y_fit = parabola_func(x_vals_clean, *popt)
+        return x_vals_clean, y_fit, popt
 
     def sigma_filter(self, x_vals, y_vals, n_sigma):
-        """Removes data points where y_vals deviate from the mean by more than n_sigma standard deviations.
-
-        This is a simple outlier removal technique used to filter noisy data before further analysis or fitting.
-
-        :param x_vals: np.ndarray, the array of independent variable (x) values corresponding to the y values.
-        :param y_vals: np.ndarray, the array of dependent variable (y) values to be filtered for outliers.
-        :param n_sigma: float, the number of standard deviations away from the mean that a data point can be to be considered an inlier. Data points beyond this threshold are considered outliers and removed.
-        :return: tuple of (x_vals_filtered, y_vals_filtered), containing the x and y values after the outlier removal process.
         """
-        # Remove NaN values from x_vals and y_vals
-        valid_indices = ~np.isnan(y_vals) # Creates a boolean array indicating indices where y_vals are not NaN.
-        x_vals_clean = x_vals[valid_indices] # Filters x_vals to keep only values at valid indices.
-        y_vals_clean = y_vals[valid_indices] # Filters y_vals to remove NaN values.
+        Remove data points where y_vals deviate from the mean by more than n_sigma standard deviations.
+        """
+        valid_indices = ~np.isnan(y_vals)
+        x_vals_clean = x_vals[valid_indices]
+        y_vals_clean = y_vals[valid_indices]
 
         if len(y_vals_clean) == 0:
-            return np.array([]), np.array([]) # Return empty arrays if no valid data
+            return np.array([]), np.array([])
 
-        mean_y = np.mean(y_vals_clean) # Calculates the mean of the cleaned y-values.
-        std_y = np.std(y_vals_clean, mean=mean_y) # Calculates the standard deviation of the cleaned y-values.
-
-        # mask = np.abs(y_vals_clean - mean_y) <= n_sigma * std_y
-        mask = (y_vals_clean >= mean_y - n_sigma * std_y) & (y_vals_clean <= mean_y + n_sigma * std_y) # Creates a boolean mask that is True for data points whose y-value is within `n_sigma` standard deviations of the mean, and False otherwise (outliers).
-
-        return x_vals_clean[mask], y_vals_clean[mask] # Returns the x and y values corresponding to the True values in the mask (i.e., the filtered data without outliers).
+        mean_y = np.mean(y_vals_clean)
+        std_y = np.std(y_vals_clean, mean=mean_y)
+        mask = (y_vals_clean >= mean_y - n_sigma * std_y) & (y_vals_clean <= mean_y + n_sigma * std_y)
+        return x_vals_clean[mask], y_vals_clean[mask]
 

@@ -23,46 +23,39 @@ directory_dict = {
     "crossTrack":  r"/data/home/cjescobar/Projects/AirHARP2/SWIR/raw_data/2025_SWIR_Flatfield/LEFT_RIGHT/",
     "alongTrack" : r"/data/home/cjescobar/Projects/AirHARP2/SWIR/raw_data/2025_SWIR_Flatfield/UP_DOWN/",
     "metadata" : r"/data/home/cjescobar/Projects/AirHARP2/SWIR/gits/AH2_SWIR_metadata_matcher/202502_SWIR_Flatfield_Matched_Metadata.csv"
-    }
+}
 
 crossTrack_dict = {
-    "pos1" : "20250206_FILTPOS_050_INTTIME_02p0", # pos1 = 050 = 1.57um
-    "pos2" : "20250206_FILTPOS_090_INTTIME_01p5", # pos2 = 090 = 1.55um
-    "pos3" : "20250206_FILTPOS_130_INTTIME_02p0", # pos3 = 130 = 1.38um
-    "pos4" : "20250206_FILTPOS_169_INTTIME_00p2"  # pos4 = 169 = OPEN
+    "pos1" : "20250206_FILTPOS_050_INTTIME_02p0", # 1.57um
+    "pos2" : "20250206_FILTPOS_090_INTTIME_01p5", # 1.55um
+    "pos3" : "20250206_FILTPOS_130_INTTIME_02p0", # 1.38um
+    "pos4" : "20250206_FILTPOS_169_INTTIME_00p2"  # OPEN
 }
 
 crossTrackDark_dict = {
-    "pos1" : "20250206_FILTPOS_010_INTTIME_02p0", # corresponding dark folder for 02p0 integration time
-    "pos2" : "20250206_FILTPOS_010_INTTIME_01p5", # corresponding dark folder for 01p5 integration time
-    "pos3" : "20250206_FILTPOS_130_INTTIME_02p0", # corresponding dark folder for 02p0 integration time
-    "pos4" : "20250206_FILTPOS_010_INTTIME_00p2"  # corresponding dark folder for 00p2 integration time
+    "pos1" : "20250206_FILTPOS_010_INTTIME_02p0",
+    "pos2" : "20250206_FILTPOS_010_INTTIME_01p5",
+    "pos3" : "20250206_FILTPOS_130_INTTIME_02p0",
+    "pos4" : "20250206_FILTPOS_010_INTTIME_00p2"
 }
 
 alongTrack_dict = {
-    "pos1" : "20250205_FILTPOS_050_INTTIME_02p0",  # pos1 = 050 = 1.57um
-    "pos2" : "20250205_FILTPOS_090_INTTIME_01p5",  # pos3 = 130 = 1.38um
-    "pos3" : "20250205_FILTPOS_130_INTTIME_02p0",  # pos3 = 130 = 1.38um
-    "pos4" : "20250205_FILTPOS_169_INTTIME_00p2",  # pos4 = 169 = OPEN
+    "pos1" : "20250205_FILTPOS_050_INTTIME_02p0",  # 1.57um
+    "pos2" : "20250205_FILTPOS_090_INTTIME_01p5",  # 1.55um
+    "pos3" : "20250205_FILTPOS_130_INTTIME_02p0",  # 1.38um
+    "pos4" : "20250205_FILTPOS_169_INTTIME_00p2",  # OPEN
 }
 
 alongTrackDark_dict = {
-    "pos1" : "20250205_FILTPOS_010_INTTIME_02p0", # corresponding dark folder for 02p0 integration time
-    "pos2" : "20250205_FILTPOS_010_INTTIME_01p5", # corresponding dark folder for 01p5 integration time
-    "pos3" : "20250205_FILTPOS_010_INTTIME_02p0", # corresponding dark folder for 02p0 integration time
-    "pos4" : "20250205_FILTPOS_010_INTTIME_00p2"  # corresponding dark folder for 00p2 integration time
+    "pos1" : "20250205_FILTPOS_010_INTTIME_02p0",
+    "pos2" : "20250205_FILTPOS_010_INTTIME_01p5",
+    "pos3" : "20250205_FILTPOS_010_INTTIME_02p0",
+    "pos4" : "20250205_FILTPOS_010_INTTIME_00p2"
 }
 
 def parabola_func(x, constant, linear, quadratic):
-        """
-        Defines a parabolic function (quadratic polynomial).
-
-        This function is used as the model for fitting a parabola to data points.
-
-        :param x: float or np.ndarray, the independent variable(s) at which to evaluate the parabola.
-        :param constant: float, the y-intercept (constant term) of the parabola.
-        :param linear: float, the coefficient of the linear term (the slope at x=0 if quadratic is zero).
-        :param quadratic: float, the coefficient of the quadratic term (determines the curvature of the parabola).
-        :return: float or np.ndarray, the calculated y-value(s) of the parabola for the given x value(s).
-        """
-        return constant + linear * x + quadratic * (x**2)
+    """
+    Parabolic function: y = constant + linear*x + quadratic*x^2
+    Used for curve fitting.
+    """
+    return constant + linear * x + quadratic * (x**2)
