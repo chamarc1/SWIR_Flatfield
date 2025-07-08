@@ -41,9 +41,9 @@ class CompositeProcessor:
         """
         self.track_dir = track_dir
         self.metadata = metadata
-        self.track_processor = ImageProcessor(track_dir)
+        self.track_processor = ImageProcessor(track_dir, metadata)  # Pass metadata to ImageProcessor
         self.constant = 0.0
-        self. linear = 0.0
+        self.linear = 0.0
         self.quadratic = 0.0
         self.constant_err = 0.0
         self.linear_err = 0.0
@@ -58,9 +58,10 @@ class CompositeProcessor:
         :return: np.ndarray or None, the average dark frame as a NumPy array. Returns None if no dark images are found.
         """
         dark_images = []
-        for degree_pos, images in self.track_processor.image_data.get(dark_pos, {}).items(): # Iterates through the images associated with each degree position within the specified dark filter position. The .get(dark_pos, {}) ensures that an empty dictionary is returned if the dark_pos is not found, preventing errors.
-            dark_images.extend(images) # Extends the dark_images list with the list of images found at the current degree position.
-        return np.mean(np.asarray(dark_images), axis=0) if dark_images else None # If dark_images is not empty, it converts the list of dark frame images to a NumPy array and calculates the mean along the first axis (averaging all images pixel-wise). If dark_images is empty, it returns None.
+        for degree_pos, images in self.track_processor.image_data.get(dark_pos, {}).items():
+            # Extract image arrays from dicts
+            dark_images.extend([img_dict["image"] for img_dict in images])
+        return np.mean(np.asarray(dark_images), axis=0) if dark_images else None
 
     def correct_images_with_dark_frame(self, images, dark_frame):
         """Correct images by subtracting the average dark frame from each image, using absolute difference.
@@ -72,7 +73,8 @@ class CompositeProcessor:
         :return: list of np.ndarray, a list of dark frame corrected images as NumPy arrays.
         """
         corrected_images = []
-        for image in images:
+        for img_dict in images:
+            image = img_dict["image"]
             if dark_frame is not None:
                 # Subtract dark frame, take absolute value, clip to valid range, and cast to uint16
                 corrected_image = np.abs(image.astype(np.int32) - dark_frame.astype(np.int32))
@@ -90,8 +92,8 @@ class CompositeProcessor:
         n_images = min(len(filter_images), len(dark_images))
         corrected = []
         for i in range(n_images):
-            img = filter_images[i]
-            dark = dark_images[i]
+            img = filter_images[i]["image"]
+            dark = dark_images[i]["image"]
             diff = np.abs(img.astype(np.int32) - dark.astype(np.int32))
             diff = np.clip(diff, 0, 2**14 - 1).astype(np.uint16)
             corrected.append(diff)
@@ -102,7 +104,8 @@ class CompositeProcessor:
         Corrects images by subtracting the average dark frame from each image.
         """
         corrected = []
-        for img in images:
+        for img_dict in images:
+            img = img_dict["image"]
             diff = np.abs(img.astype(np.int32) - dark_frame.astype(np.int32))
             diff = np.clip(diff, 0, 2**14 - 1).astype(np.uint16)
             corrected.append(diff)
@@ -133,7 +136,7 @@ class CompositeProcessor:
             if not dark_images:
                 print("No dark images found for average dark subtraction.")
                 return []
-            dark_frame = np.mean(np.stack(dark_images), axis=0)
+            dark_frame = np.mean(np.stack([img_dict["image"] for img_dict in dark_images]), axis=0)
             corrected = self.correct_images_with_average_dark(filter_images, dark_frame)
             print(f"Info: Using {len(corrected)} images with average dark subtraction for filter '{filter_pos}'.")
             return corrected

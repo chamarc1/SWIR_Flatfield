@@ -17,6 +17,7 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from PIL import Image
+import pandas as pd
 
 #----------------------------------------------------------------------------
 #-- GLOBALS
@@ -28,12 +29,18 @@ mpl.use("Qt5Agg")
 #-- ImageProcessor - class for opening images
 #----------------------------------------------------------------------------
 class ImageProcessor:
-    def __init__(self, base_directory):
+    def __init__(self, base_directory, metadata_csv=None):
         """
         Initializes the ImageProcessor with the base directory and loads all images.
+        Optionally loads TEC metadata if a CSV is provided.
         :param base_directory: str, path to the base directory containing image data.
+        :param metadata_csv: str, path to the CSV file with metadata.
         """
         self.base_directory = base_directory
+        self.tec_map = {}
+        if metadata_csv:
+            df = pd.read_csv(metadata_csv)
+            self.tec_map = dict(zip(df['FILEPATH'], df['TEC_READING(CELCIUS)']))
         self.image_data = self.load_images()
 
     def is_valid_directory(self, path):
@@ -44,13 +51,14 @@ class ImageProcessor:
         """
         Loads an image, converts to NumPy array, and applies bit shift correction.
         :param image_path: str, full path to the image file.
-        :return: np.ndarray or None if loading fails.
+        :return: dict with processed image and TEC value or None if loading fails.
         """
         try:
             image = Image.open(image_path)
             numpy_array = np.asarray(image)
             processed_array = BIT_SHIFT - numpy_array
-            return processed_array
+            tec_value = self.tec_map.get(image_path)
+            return {"image": processed_array, "tec": tec_value}
         except Exception as e:
             print(f"Error loading {image_path}: {e}")
             return None
@@ -59,15 +67,15 @@ class ImageProcessor:
         """
         Loads and processes all TIFF images in a directory.
         :param degree_path: str, path to directory with images for a degree position.
-        :return: list of np.ndarray
+        :return: list of dicts with processed images and TEC values
         """
         images = []
         for filename in os.listdir(degree_path):
             if filename.lower().endswith((".tif", ".tiff")):
                 image_path = os.path.join(degree_path, filename)
-                processed_image = self.process_image(image_path)
-                if processed_image is not None:
-                    images.append(processed_image)
+                processed = self.process_image(image_path)
+                if processed is not None:
+                    images.append(processed)
         return images
 
     def load_filter_data(self, filter_path):

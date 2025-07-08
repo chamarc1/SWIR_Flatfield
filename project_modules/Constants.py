@@ -22,7 +22,7 @@ corrected_composite_save_path = r"/data/home/cmarc/SWIR_Projects/Flatfield/Image
 directory_dict = {
     "crossTrack":  r"/data/home/cjescobar/Projects/AirHARP2/SWIR/raw_data/2025_SWIR_Flatfield/LEFT_RIGHT/",
     "alongTrack" : r"/data/home/cjescobar/Projects/AirHARP2/SWIR/raw_data/2025_SWIR_Flatfield/UP_DOWN/",
-    "metadata" : r"/data/home/cjescobar/Projects/AirHARP2/SWIR/gits/AH2_SWIR_metadata_matcher/202502_SWIR_Flatfield_Matched_Metadata.csv"
+    "metadata" : r"/data/ESI/User/cjescobar/Projects/AirHARP2/SWIR/gits/AH2_SWIR_metadata_matcher/202502_SWIR_Flatfield_Matched_Metadata_v2.csv"
 }
 
 crossTrack_dict = {

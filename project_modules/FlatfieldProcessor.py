@@ -109,7 +109,10 @@ class FlatfieldProcessor:
         Returns the filtered and smoothed profile and the corresponding x values.
         """
         avg_profiles = []
-        for image in images:
+        # Accepts either a list of dicts (with "image" key) or a list of arrays
+        for img in images:
+            # If img is a dict, extract the array
+            image = img["image"] if isinstance(img, dict) else img
             if direction == "cross":
                 row_start = max(pos - avg_window, 0)
                 row_end = min(pos + avg_window + 1, image.shape[0])
@@ -162,7 +165,7 @@ class FlatfieldProcessor:
         plt.show()
 
         return x_vals_filtered, profile_smoothed
-    
+
     def generate_quadratic_envelope_flatfield(self, pos_cross=526, pos_along=685, avg_window=10, num_sigma=2.0, window_length=61, polyorder=3, smoothing_sigma=None):
         """
         Generate a 2D flatfield correction array based on quadratic envelope fits to mean profiles.
@@ -170,23 +173,26 @@ class FlatfieldProcessor:
         """
         # Cross-track envelope
         images_cross = self.crossTrack_processor.generate_images(self.cross_filter_pos, self.cross_dark_pos)
+        # Extract arrays for profile calculation, robust to both dicts and arrays
+        cross_arrays = [img["image"] if isinstance(img, dict) else img for img in images_cross]
         x_vals_cross, profile_cross = self.extract_profile(
-            images_cross, pos_cross, direction="cross", avg_window=avg_window,
+            cross_arrays, pos_cross, direction="cross", avg_window=avg_window,
             num_sigma=num_sigma, window_length=window_length, polyorder=polyorder
         )
         _, _, popt_cross = self.quadratic_fit(x_vals_cross, profile_cross)
-        envelope_cross = parabola_func(np.arange(images_cross[0].shape[1]), *popt_cross)
-        envelope_cross_2d = np.tile(envelope_cross, (images_cross[0].shape[0], 1))
+        envelope_cross = parabola_func(np.arange(cross_arrays[0].shape[1]), *popt_cross)
+        envelope_cross_2d = np.tile(envelope_cross, (cross_arrays[0].shape[0], 1))
 
         # Along-track envelope
         images_along = self.alongTrack_processor.generate_images(self.along_filter_pos, self.along_dark_pos)
+        along_arrays = [img["image"] if isinstance(img, dict) else img for img in images_along]
         x_vals_along, profile_along = self.extract_profile(
-            images_along, pos_along, direction="along", avg_window=avg_window,
+            along_arrays, pos_along, direction="along", avg_window=avg_window,
             num_sigma=num_sigma, window_length=window_length, polyorder=polyorder
         )
         _, _, popt_along = self.quadratic_fit(x_vals_along, profile_along)
-        envelope_along = parabola_func(np.arange(images_along[0].shape[0]), *popt_along)
-        envelope_along_2d = np.tile(envelope_along[:, np.newaxis], (1, images_along[0].shape[1]))
+        envelope_along = parabola_func(np.arange(along_arrays[0].shape[0]), *popt_along)
+        envelope_along_2d = np.tile(envelope_along[:, np.newaxis], (1, along_arrays[0].shape[1]))
 
         # Combine and normalize by optical center
         envelope_2d = (envelope_cross_2d + envelope_along_2d) / 2.0
