@@ -20,6 +20,7 @@ from scipy.ndimage import gaussian_filter, median_filter
 from scipy.signal import savgol_filter
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from project_modules.CompositeProcessor import CompositeProcessor
 from project_modules.Constants import flatfield_save_path, composite_save_path, parabola_func
 from project_modules.Constants import directory_dict, crossTrack_dict, crossTrackDark_dict, alongTrack_dict, alongTrackDark_dict
@@ -29,10 +30,10 @@ from project_modules.Constants import directory_dict, crossTrack_dict, crossTrac
 #----------------------------------------------------------------------------
 # OPTICAL_CENTER_X = 526
 # OPTICAL_CENTER_Y = 685
-# OPTICAL_CENTER_X = 685
-# OPTICAL_CENTER_Y = 526
-OPTICAL_CENTER_X = 675
-OPTICAL_CENTER_Y = 560
+OPTICAL_CENTER_X = 685
+OPTICAL_CENTER_Y = 526
+# OPTICAL_CENTER_X = 675
+# OPTICAL_CENTER_Y = 560
 
 #----------------------------------------------------------------------------
 def plot_composite(composite_image):
@@ -55,6 +56,7 @@ class FlatfieldProcessor:
         """
         Initializes the FlatfieldProcessor and sets up filter/dark positions.
         """
+        self.wheel_pos = wheel_pos  # Store the wheel position
         self.crossTrack_processor = CompositeProcessor(directory_dict["crossTrack"], directory_dict["metadata"])
         self.alongTrack_processor = CompositeProcessor(directory_dict["alongTrack"], directory_dict["metadata"])
 
@@ -218,40 +220,109 @@ class FlatfieldProcessor:
 
     def generate_quadratic_envelope_flatfield(self, avg_window=10, num_sigma=2.0, window_length=61, polyorder=3, smoothing_sigma=None):
         """
-        Generate a 2D flatfield correction array based on quadratic envelope fits to mean profiles.
-        Models large-scale illumination gradients (e.g., vignetting).
+        Generate a flatfield correction using quadratic envelope fitting.
+        
+        This is the main method that creates the flatfield correction. It works by:
+        1. Loading and processing composite images
+        2. Extracting brightness profiles in both directions  
+        3. Fitting smooth envelopes to these profiles
+        4. Creating a 2D correction from the fitted envelopes
+        5. Displaying the results
+        
+        Args:
+            avg_window (int): Window size for averaging profiles
+            num_sigma (float): Sigma clipping threshold for outlier removal
+            window_length (int): Window length for Savitzky-Golay smoothing
+            polyorder (int): Polynomial order for smoothing
+            smoothing_sigma (float): Gaussian smoothing parameter (if used)
         """
-        # Cross-track envelope using crossTrack_processor
+        print(f"Starting flatfield generation for filter position {self.wheel_pos}")
+        
+        # STEP 1: Extract cross-track profile (horizontal variation)
+        print("Extracting cross-track brightness profile...")
         x_vals_cross, profile_cross, envelope_cross = self.extract_row_profile(
             avg_window=avg_window, num_sigma=num_sigma, 
             window_length=window_length, polyorder=polyorder
         )
-        # Get shape from one of the crosstrack images for envelope creation
-        images_cross = self.crossTrack_processor.generate_images(self.cross_filter_pos, self.cross_dark_pos)
-        cross_arrays = [img["image"] if isinstance(img, dict) else img for img in images_cross]
-        # Create full envelope using the fitted parameters
-        _, _, popt_cross = self.quadratic_fit(x_vals_cross, profile_cross)
-        envelope_cross_full = parabola_func(np.arange(cross_arrays[0].shape[1]), *popt_cross)
-        envelope_cross_2d = np.tile(envelope_cross_full, (cross_arrays[0].shape[0], 1))
-
-        # Along-track envelope using alongTrack_processor
+        
+        # STEP 2: Extract along-track profile (vertical variation)
+        print("Extracting along-track brightness profile...")
         x_vals_along, profile_along, envelope_along = self.extract_column_profile(
             avg_window=avg_window, num_sigma=num_sigma,
             window_length=window_length, polyorder=polyorder
         )
 
-        # Create 3D plot of the profiles only
-        self.plot_3d_envelope(x_vals_cross, profile_cross, envelope_cross, x_vals_along, profile_along, envelope_along)
+        # STEP 3: Create 2D flatfield from profiles (using existing logic)
+        print("Creating 2D flatfield correction...")
+        # Get shape from one of the crosstrack images for envelope creation
+        images_cross = self.crossTrack_processor.generate_images(self.cross_filter_pos, self.cross_dark_pos)
+        cross_arrays = [img["image"] if isinstance(img, dict) else img for img in images_cross]
+        
+        # Create full envelope using the fitted parameters
+        _, _, popt_cross = self.quadratic_fit(x_vals_cross, profile_cross)
+        envelope_cross_full = parabola_func(np.arange(cross_arrays[0].shape[1]), *popt_cross)
+        envelope_cross_2d = np.tile(envelope_cross_full, (cross_arrays[0].shape[0], 1))
+
+        # STEP 4: Display analysis plots
+        print("Generating analysis plots...")
+        # Show 2D comparison of profiles
+        self.plot_2d_envelope(x_vals_cross, profile_cross, envelope_cross, 
+                             x_vals_along, profile_along, envelope_along)
+        
+        # Show 3D visualization
+        self.plot_3d_envelope(x_vals_cross, profile_cross, envelope_cross,
+                             x_vals_along, profile_along, envelope_along)
+        
+        print("Flatfield generation completed successfully!")
+        
+    def plot_2d_envelope(self, x_vals_cross, profile_cross, envelope_cross, x_vals_along, profile_along, envelope_along):
+        """
+        Create a 2D plot of the individual signal profiles and their envelopes.
+        Shows both cross-track and along-track profiles in separate subplots for easy comparison.
+        
+        Args:
+            x_vals_cross: Cross-track pixel indices
+            profile_cross: Original cross-track profile data
+            envelope_cross: Fitted envelope for cross-track profile
+            x_vals_along: Along-track pixel indices  
+            profile_along: Original along-track profile data
+            envelope_along: Fitted envelope for along-track profile
+        """
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+        
+        # Plot cross-track (row) profile and envelope
+        ax1.plot(x_vals_cross, profile_cross, 'o', markersize=3, alpha=0.6, 
+                label='Cross-Track Data', color='lightblue')
+        ax1.plot(x_vals_cross, envelope_cross, 'b-', linewidth=2, 
+                label='Cross-Track Envelope')
+        ax1.set_xlabel('Cross-Track Pixel Index')
+        ax1.set_ylabel('Normalized Intensity')
+        ax1.set_title('Cross-Track Profile and Envelope')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend()
+        
+        # Plot along-track (column) profile and envelope
+        ax2.plot(x_vals_along, profile_along, 'o', markersize=3, alpha=0.6, 
+                label='Along-Track Data', color='lightcoral')
+        ax2.plot(x_vals_along, envelope_along, 'r-', linewidth=2, 
+                label='Along-Track Envelope')
+        ax2.set_xlabel('Along-Track Pixel Index')
+        ax2.set_ylabel('Normalized Intensity')
+        ax2.set_title('Along-Track Profile and Envelope')
+        ax2.grid(True, alpha=0.3)
+        ax2.legend()
+        
+        plt.tight_layout()
+        plt.show()
+        
     
     def plot_3d_envelope(self, x_vals_cross, profile_cross, envelope_cross, x_vals_along, profile_along, envelope_along):
         """
-        Create a 3D plot of the individual profiles and their envelopes.
+        Create a 3D plot of the individual profiles and their envelopes
         X-axis: Cross-track pixel count
         Y-axis: Along-track pixel count  
         Z-axis: Signal (DN)
         """
-        from mpl_toolkits.mplot3d import Axes3D
-        
         # Create 3D plot
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111, projection='3d')

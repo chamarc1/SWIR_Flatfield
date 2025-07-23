@@ -75,44 +75,174 @@ corrected_image, metadata = flatfield_processor.apply_flatfield_to_raw(raw_image
 
 **These improvements ensure your pipeline is fully aligned with current best practices for SWIR sensor calibration and is ready for reproducible, quantitative scientific analysis.**
 
-## Usage
+## Quick Start Guide
 
-1.  **Installation**:
-    * Ensure you have Python 3.x installed on your system.
-    * Install the required Python libraries:
-        ```bash
-        pip install numpy matplotlib scipy
-        ```
-    * Place the `CompositeProcessor.py`, `FlatfieldProcessor.py`, `ImageProcessor.py`, and `Constants.py` files in your project directory.
+### What is Flatfield Correction?
 
-2.  **Data Organization**:
-    * Organize your image data in a directory structure that the `ImageProcessor` can understand. Typically, this involves a main directory containing subdirectories for each filter position, and within each filter directory, subdirectories for different degree settings. Ensure your dark frames and flatfield frames are placed in appropriately named filter positions (e.g., "dark", "flat"). This structure may be updated with files from NASA testing.
+A flatfield correction removes spatial variations in sensor response, making your images more uniform and improving data quality. Think of it like correcting for uneven lighting in a photograph - some parts of the sensor might be slightly more or less sensitive than others, and this tool creates a correction to even that out.
 
-3.  **Configuration (`Constants.py`)**:
-    * Review and modify the paths defined in `Constants.py` to specify where you want the generated plots and flatfield files to be saved.
+### Basic Usage
 
-4.  **Running the Pipeline (`Main.py`)**:
-    * The main script is run from the command line and accepts arguments for the filter wheel position and optional Gaussian smoothing:
-        ```bash
-        python Main.py --wheel_pos <FILTER_WHEEL_POSITION> [--num_sigma <SMOOTHING_SIGMA>]
-        ```
-        - `<FILTER_WHEEL_POSITION>`: The SWIR filter wheel position to process (required).
-        - `--num_sigma`: Standard deviation for Gaussian smoothing applied to all loaded/generated images (default: 1.0).
+To process images for a specific filter position:
 
-    * Example:
-        ```bash
-        python Main.py --wheel_pos 050 --num_sigma 1.5
-        ```
+```bash
+python Main.py --wheel_pos pos1
+```
 
-    * The script will:
-        - Instantiate a `FlatfieldProcessor` for the specified wheel position.
-        - Characterize the pixel-to-pixel flatfield response using composite images from both cross-track and along-track directions.
-        - Apply optional smoothing and handle defective pixels.
-        - Save the resulting flatfield and metadata for future use.
+With custom smoothing:
 
-5.  **Applying Flatfield to Raw Images**:
-    * Once you have raw images and a saved flatfield, you can use the `apply_flatfield_to_raw` method in `FlatfieldProcessor` to correct your data (see the "Flatfield Characterization and Application" section above for an example).
+```bash
+python Main.py --wheel_pos pos1 --num_sigma 2.0    # More smoothing
+python Main.py --wheel_pos pos1 --num_sigma 0.5    # Less smoothing  
+python Main.py --wheel_pos pos1 --num_sigma 0      # No smoothing
+```
+
+### Understanding the Parameters
+
+#### --wheel_pos (Required)
+- **What it is**: The filter wheel position you want to process
+- **Example values**: "pos1", "pos2", "pos3", "pos4" (based on your Constants.py setup)
+- **Why needed**: Different filters may need different corrections
+
+#### --num_sigma (Optional)
+- **What it is**: Controls how much smoothing is applied to the correction
+- **Default**: 1.0
+- **Higher values** (e.g., 2.0): More smoothing, gentler correction
+- **Lower values** (e.g., 0.5): Less smoothing, preserves more detail
+- **Zero**: No smoothing at all
+
+## Detailed Setup and Usage
+
+### 1. Installation
+
+* Ensure you have Python 3.x installed on your system.
+* Install the required Python libraries:
+    ```bash
+    pip install numpy matplotlib scipy pillow pandas
+    ```
+* Place the `CompositeProcessor.py`, `FlatfieldProcessor.py`, `ImageProcessor.py`, and `Constants.py` files in your project directory.
+
+### 2. Data Organization
+
+* Organize your image data in a directory structure that the `ImageProcessor` can understand. Typically, this involves a main directory containing subdirectories for each filter position, and within each filter directory, subdirectories for different degree settings. Ensure your dark frames and flatfield frames are placed in appropriately named filter positions (e.g., "dark", "flat"). This structure may be updated with files from NASA testing.
+
+### 3. Configuration (`Constants.py`)
+
+* Review and modify the paths defined in `Constants.py` to specify where you want the generated plots and flatfield files to be saved.
+
+### 4. Running the Pipeline (`Main.py`)
+
+* The main script is run from the command line and accepts arguments for the filter wheel position and optional Gaussian smoothing:
+    ```bash
+    python Main.py --wheel_pos <FILTER_WHEEL_POSITION> [--num_sigma <SMOOTHING_SIGMA>]
+    ```
+
+* Examples:
+    ```bash
+    python Main.py --wheel_pos pos1 --num_sigma 1.5
+    python Main.py --wheel_pos pos2
+    python Main.py --wheel_pos pos3 --num_sigma 0    # No smoothing
+    ```
+
+* The script will:
+    - Instantiate a `FlatfieldProcessor` for the specified wheel position.
+    - Characterize the pixel-to-pixel flatfield response using composite images from both cross-track and along-track directions.
+    - Apply optional smoothing and handle defective pixels.
+    - Save the resulting flatfield and metadata for future use.
+
+### 5. Applying Flatfield to Raw Images
+
+* Once you have raw images and a saved flatfield, you can use the `apply_flatfield_to_raw` method in `FlatfieldProcessor` to correct your data (see the "Flatfield Characterization and Application" section above for an example).
+
+## What the Tool Does
+
+1. **Loads Images**: Reads in multiple SWIR images from the specified filter position
+2. **Extracts Profiles**: Analyzes how brightness varies across the image
+3. **Fits Envelopes**: Creates smooth curves that follow the brightness patterns
+4. **Creates Correction**: Generates a 2D flatfield correction
+5. **Shows Results**: Displays plots showing the correction and analysis
+
+## Output Files
+
+The tool creates several output files in the `Images/` directory:
+
+- **flatfield.png**: The final flatfield correction image
+- **flatfield_plot.png**: Analysis plots showing how the correction was created
+- **along_track.png**: Profile analysis in the along-track direction
+- **along_track_core.png**: Core region analysis for along-track
+- **composite.png**: Combined image analysis
+
+## Understanding the Plots
+
+### Profile Plots
+- Show how brightness varies across the image
+- Blue lines: Cross-track direction (left-to-right across the image)
+- Red lines: Along-track direction (top-to-bottom of the image)
+
+### 3D Plots
+- Show the overall shape of the flatfield correction
+- Higher areas appear brighter in the final correction
+
+### Envelope Plots
+- Show the smooth curves fitted to the brightness profiles
+- These curves are used to create the final correction
+
+## Troubleshooting
+
+### "No images found for filter position"
+- Check that your filter position exists in the data
+- Verify the Constants.py file has the correct mappings
+- Ensure your data directory structure matches what the code expects
+
+### "Error during processing"
+- Try different smoothing values (--num_sigma)
+- Check that input images are readable and in the correct format
+- Ensure you have write permissions in the output directory
+- Verify that all required dependencies are installed
+
+### Plots look wrong
+- Try adjusting the smoothing parameter
+- Check that input images are properly calibrated
+- Verify dark frame corrections are working
+- Make sure optical center coordinates are correct for your data
+
+### Processing Multiple Positions
+```bash
+python Main.py --wheel_pos pos1
+python Main.py --wheel_pos pos2  
+python Main.py --wheel_pos pos3
+python Main.py --wheel_pos pos4
+```
+
+## Tips for Best Results
+
+1. **Start with default settings** - Try `--num_sigma 1.0` first
+2. **Examine the plots** - Look at the generated images to understand your data
+3. **Adjust smoothing** - If correction looks too rough, increase num_sigma; if too smooth, decrease it
+4. **Check input data** - Make sure your images are properly dark-corrected
+5. **Verify output** - Always examine the flatfield correction before applying to science data
+6. **Use consistent parameters** - Keep the same processing parameters for related datasets
+
+## For Developers
+
+- The main processing happens in `FlatfieldProcessor.py`
+- Image loading and dark correction in `CompositeProcessor.py`
+- Configuration settings in `Constants.py`
+- Individual image processing in `ImageProcessor.py`
+- All methods include comprehensive docstrings and beginner-friendly comments
+
+## Getting Help
+
+If you encounter issues:
+1. Check the troubleshooting section above first
+2. Look at the generated plots to understand what's happening
+3. Try different parameter values (especially --num_sigma)
+4. Verify your data organization matches the expected structure
+5. Check that all file paths in Constants.py are correct
+6. Ensure you have all required Python packages installed
 
 ## Contributing
 
-Contact Charlemagne Marc (email: chamarc1@umbc.edu) for any contriubtion inquiries.
+This tool is designed to be accessible to users with varying levels of coding experience. Don't hesitate to experiment with different settings to understand how they affect your results!
+
+Contact Charlemagne Marc (email: chamrc1@umbc.edu) for any contribution inquiries, bug reports, or feature requests.
