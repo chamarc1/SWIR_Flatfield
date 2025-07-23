@@ -13,11 +13,13 @@ __status__ =    "Production"
 #-- IMPORT STATEMENTS
 #----------------------------------------------------------------------------
 import os
+import re
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from PIL import Image
 import pandas as pd
+import glob
 
 #----------------------------------------------------------------------------
 #-- GLOBALS
@@ -40,8 +42,18 @@ class ImageProcessor:
         self.tec_map = {}
         if metadata_csv:
             df = pd.read_csv(metadata_csv)
-            self.tec_map = dict(zip(df['FILEPATH'], df['TEC_READING(CELCIUS)']))
+            # Normalize keys for matching
+            self.tec_map = {os.path.abspath(str(k)): v for k, v in zip(df['FILEPATH'], df['TEC_READING(CELCIUS)'])}
         self.image_data = self.load_images()
+
+    @staticmethod
+    def _extract_integration_time(image_path):
+        """
+        Extracts the integration time (e.g., '02p0') from the image path.
+        Returns None if not found.
+        """
+        match = re.search(r'INTTIME_([0-9a-zA-Z]+)', image_path)
+        return match.group(1) if match else None
 
     def is_valid_directory(self, path):
         """Returns True if the path is a valid directory."""
@@ -50,15 +62,33 @@ class ImageProcessor:
     def process_image(self, image_path):
         """
         Loads an image, converts to NumPy array, and applies bit shift correction.
-        :param image_path: str, full path to the image file.
-        :return: dict with processed image and TEC value or None if loading fails.
+        Adds TEC and INTTIME metadata.
         """
         try:
-            image = Image.open(image_path)
+            abs_path = os.path.abspath(image_path)
+            image = Image.open(abs_path)
             numpy_array = np.asarray(image)
             processed_array = BIT_SHIFT - numpy_array
-            tec_value = self.tec_map.get(image_path)
-            return {"image": processed_array, "tec": tec_value}
+
+            # Try absolute path first
+            tec_value = self.tec_map.get(abs_path)
+            if tec_value is None:
+                # Fallback: match by filename only
+                abs_filename = os.path.basename(abs_path)
+                for k, v in self.tec_map.items():
+                    if os.path.basename(k) == abs_filename:
+                        tec_value = v
+                        break
+                if tec_value is None:
+                    print(f"TEC lookup failed for: {abs_path}")
+
+            inttime = self._extract_integration_time(abs_path)
+            return {
+                "image": processed_array,
+                "tec": tec_value,
+                "inttime": inttime,
+                "path": abs_path
+            }
         except Exception as e:
             print(f"Error loading {image_path}: {e}")
             return None
@@ -67,7 +97,7 @@ class ImageProcessor:
         """
         Loads and processes all TIFF images in a directory.
         :param degree_path: str, path to directory with images for a degree position.
-        :return: list of dicts with processed images and TEC values
+        :return: list of dicts with processed images and metadata
         """
         images = []
         for filename in os.listdir(degree_path):
@@ -82,7 +112,7 @@ class ImageProcessor:
         """
         Loads image data for a filter position, organized by degree position.
         :param filter_path: str, path to filter directory.
-        :return: dict mapping degree position to list of images.
+        :return: dict mapping degree position to list of image dicts.
         """
         filter_data = {}
         for degree_pos in os.listdir(filter_path):
@@ -94,7 +124,7 @@ class ImageProcessor:
     def load_images(self):
         """
         Loads all images from the base directory, organized by filter and degree position.
-        :return: nested dict: filter position -> degree position -> list of images
+        :return: nested dict: filter position -> degree position -> list of image dicts
         """
         image_data = {}
         if not self.is_valid_directory(self.base_directory):
@@ -122,14 +152,14 @@ class ImageProcessor:
         fig, axes = plt.subplots(1, num_images, figsize=(5 * num_images, 5))
         if num_images == 1:
             axes = [axes]
-        for ax, image in zip(axes, images):
-            ax.imshow(image)
+        for ax, img_dict in zip(axes, images):
+            ax.imshow(img_dict["image"])
             ax.axis("off")
         plt.show()
 
     def get_images(self, filter_pos, degree_pos):
         """
-        Returns list of images for a specific filter and degree position.
+        Returns list of image dicts for a specific filter and degree position.
         :param filter_pos: str
         :param degree_pos: str
         :return: list of np.ndarray
@@ -138,3 +168,17 @@ class ImageProcessor:
             print(f"No data found for filter position: {filter_pos} or degree position: {degree_pos}")
             return []
         return self.image_data[filter_pos][degree_pos]
+
+    def get_images_with_metadata_from_path(self, root_path):
+        """
+        Recursively finds all TIFF images under root_path and returns a list of dicts
+        with image array, TEC, INTTIME, and path.
+        """
+        image_dicts = []
+        image_paths = glob.glob(os.path.join(root_path, "**", "*.tif*"), recursive=True)
+        for image_path in image_paths:
+            processed = self.process_image(image_path)
+            if processed is not None:
+                image_dicts.append(processed)
+                # print(processed.get("tec"))
+        return image_dicts

@@ -14,6 +14,7 @@ __status__ =    "Production"
 #----------------------------------------------------------------------------
 from project_modules.CompositeProcessor import CompositeProcessor
 from project_modules.FlatfieldProcessor import FlatfieldProcessor, plot_composite
+from project_modules.FlatfieldNormalizer import FlatfieldNormalizer
 from project_modules.Constants import directory_dict, crossTrack_dict, crossTrackDark_dict, alongTrack_dict, alongTrackDark_dict
 import argparse
 
@@ -42,47 +43,55 @@ def main():
     
     # try:
     #     # Comment/Uncomment to run/not run track wise processing
-    #     # crossTrack_processor = CompositeProcessor(directory_dict["crossTrack"], directory_dict["metadata"])
-    #     # alongTrack_processor = CompositeProcessor(directory_dict["alongTrack"], directory_dict["metadata"])
+    #     crossTrack_processor = CompositeProcessor(directory_dict["crossTrack"], directory_dict["metadata"])
+    #     alongTrack_processor = CompositeProcessor(directory_dict["alongTrack"], directory_dict["metadata"])
 
-    #     # cross_filter_pos = crossTrack_dict[args.wheel_pos]
-    #     # cross_dark_pos = crossTrackDark_dict[args.wheel_pos]
-    #     # along_filter_pos = alongTrack_dict[args.wheel_pos]
-    #     # along_dark_pos = alongTrackDark_dict[args.wheel_pos]
+    #     cross_filter_pos = crossTrack_dict[args.wheel_pos]
+    #     cross_dark_pos = crossTrackDark_dict[args.wheel_pos]
+    #     along_filter_pos = alongTrack_dict[args.wheel_pos]
+    #     along_dark_pos = alongTrackDark_dict[args.wheel_pos]
 
-    #     # # Correction mode: "average" or "pairwise"
-    #     # correction_mode = "pairwise"
+    #     # Correction mode: "average" or "pairwise"
+    #     correction_mode = "pairwise"
 
-    #     # cross_composite = crossTrack_processor.generate_composite(
-    #     #     cross_filter_pos, cross_dark_pos, correction_mode=correction_mode
-    #     # )
-    #     # crossTrack_processor.plotComposite(cross_filter_pos, cross_dark_pos)
+    #     cross_composite = crossTrack_processor.generate_composite(
+    #         cross_filter_pos, cross_dark_pos, correction_mode=correction_mode
+    #     )
+    #     crossTrack_processor.plotComposite(cross_filter_pos, cross_dark_pos)
         
         
-    #     # along_composite = alongTrack_processor.generate_composite(
-    #     #     along_filter_pos, along_dark_pos, correction_mode=correction_mode
-    #     # )
-    #     # alongTrack_processor.plotComposite(along_filter_pos, along_dark_pos)
+    #     along_composite = alongTrack_processor.generate_composite(
+    #         along_filter_pos, along_dark_pos, correction_mode=correction_mode
+    #     )
+    #     alongTrack_processor.plotComposite(along_filter_pos, along_dark_pos)
 
-    #     # composite_image = cross_composite + along_composite
-    #     # # plot_composite(composite_image)
+    #     composite_image = cross_composite + along_composite
+    #     plot_composite(composite_image)
 
     #     # # Plot parabola cores from both tracks
     #     # crossTrack_processor.plot_parabola_cores(cross_filter_pos, cross_dark_pos, core=True, along_track_pos=526)
     #     # alongTrack_processor.plot_parabola_cores(along_filter_pos, along_dark_pos, core=True, along_track_pos=685)
         
     #     # # Comment/Uncomment to run/not run flatfield processing
-    #     flatfield_processor = FlatfieldProcessor(args.wheel_pos)
-    #     flatfield_processor.generate_quadratic_envelope_flatfield(smoothing_sigma=args.num_sigma)
-    #     flatfield_processor.characterize_pixel_response(smoothing_sigma=args.num_sigma)
+    #     # flatfield_processor = FlatfieldProcessor(args.wheel_pos)
+    #     # flatfield_processor.generate_quadratic_envelope_flatfield(smoothing_sigma=args.num_sigma)
+    #     # flatfield_processor.characterize_pixel_response(smoothing_sigma=args.num_sigma)
         
     # except Exception as e:
     #     print(f"Error during main execution: {e}")
         
     flatfield_processor = FlatfieldProcessor(args.wheel_pos)
     flatfield_processor.generate_quadratic_envelope_flatfield(smoothing_sigma=args.num_sigma)
-    flatfield_processor.characterize_pixel_response(smoothing_sigma=args.num_sigma)
+    # flatfield_processor.characterize_pixel_response(smoothing_sigma=args.num_sigma)
     
+    # normalizer = FlatfieldNormalizer(args.wheel_pos)
+    # normalizer.plot_flatfield_map(title="Pixel based Flatfield Map")
+    # normalizer.plot_flatfield_map(flatfield=normalizer.generate_column_flatfield_map(), title="Column based Flatfield Map")
+    # normalizer.plot_flatfield_map(flatfield=normalizer.generate_lowfreq_flatfield_map(), title="Low frequency based Flatfield Map")
+    
+    # # Generate and plot the 3D flatfield map using metadata
+    # flatfield_3d, filter_positions, inttime_labels = FlatfieldNormalizer.generate_3d_flatfield_map_from_metadata(metadata_csv)
+    # FlatfieldNormalizer.plot_flatfield_3d(flatfield_3d, filter_positions=filter_positions, inttimes=inttime_labels)
 
 if __name__ == "__main__":
     main()

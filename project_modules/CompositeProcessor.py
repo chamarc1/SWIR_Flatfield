@@ -73,10 +73,8 @@ class CompositeProcessor:
         :return: list of np.ndarray, a list of dark frame corrected images as NumPy arrays.
         """
         corrected_images = []
-        for img_dict in images:
-            image = img_dict["image"]
+        for image in images:  # image is now a numpy array, not a dict
             if dark_frame is not None:
-                # Subtract dark frame, take absolute value, clip to valid range, and cast to uint16
                 corrected_image = np.abs(image.astype(np.int32) - dark_frame.astype(np.int32))
                 corrected_image = np.clip(corrected_image, 0, 2**14 - 1).astype(np.uint16)
             else:
@@ -90,13 +88,22 @@ class CompositeProcessor:
         Only pairs up to the minimum number of images available.
         """
         n_images = min(len(filter_images), len(dark_images))
+        if n_images == 0:
+            print("No images to pair for pairwise correction.")
+            return []
         corrected = []
         for i in range(n_images):
             img = filter_images[i]["image"]
             dark = dark_images[i]["image"]
             diff = np.abs(img.astype(np.int32) - dark.astype(np.int32))
             diff = np.clip(diff, 0, 2**14 - 1).astype(np.uint16)
-            corrected.append(diff)
+            # Preserve metadata from filter image
+            corrected.append({
+                "image": diff,
+                "tec": filter_images[i].get("tec"),
+                "inttime": filter_images[i].get("inttime"),
+                "path": filter_images[i].get("path")
+            })
         return corrected
 
     def correct_images_with_average_dark(self, images, dark_frame):
@@ -108,13 +115,20 @@ class CompositeProcessor:
             img = img_dict["image"]
             diff = np.abs(img.astype(np.int32) - dark_frame.astype(np.int32))
             diff = np.clip(diff, 0, 2**14 - 1).astype(np.uint16)
-            corrected.append(diff)
+            # Preserve metadata from original image
+            corrected.append({
+                "image": diff,
+                "tec": img_dict.get("tec"),
+                "inttime": img_dict.get("inttime"),
+                "path": img_dict.get("path")
+            })
         return corrected
 
     def generate_images(self, filter_pos, dark_pos, correction_mode="average"):
         """
         Loads and corrects images for a filter position using the specified dark correction mode.
         correction_mode: "average" (default) or "pairwise"
+        Returns a list of dicts with keys: image, tec, inttime, path.
         """
         if filter_pos not in self.track_processor.image_data or dark_pos not in self.track_processor.image_data:
             print(f"No images found for filter position: {filter_pos} or dark position: {dark_pos}")
@@ -145,9 +159,21 @@ class CompositeProcessor:
         """
         Generates a composite image using the specified dark correction mode.
         """
-        images = self.generate_images(filter_pos, dark_pos, correction_mode=correction_mode)
+        images = []
+        for degree_pos, img_dicts in self.track_processor.image_data.get(filter_pos, {}).items():
+            for img_dict in img_dicts:
+                img = img_dict["image"]  # load image as numpy array
+                images.append(img)  # Only append the image array, not a dict or tuple
+
         if not images:
+            print(f"No images found for filter position: {filter_pos}")
             return None
+
+        if correction_mode == "average":
+            dark_frame = self.compute_average_dark_frame(dark_pos)
+            if dark_frame is not None:
+                images = self.correct_images_with_dark_frame(images, dark_frame)
+
         composite = np.mean(np.stack(images), axis=0)
         return composite
 
@@ -292,7 +318,7 @@ class CompositeProcessor:
         self.quadratic_err = np.sqrt(pcov[2][2])
 
         y_fit = parabola_func(x_vals_clean, *popt)
-        return x_vals_clean, y_fit, popt
+        return x_vals_clean, y_fit, popt 
 
     def sigma_filter(self, x_vals, y_vals, n_sigma):
         """
@@ -310,3 +336,8 @@ class CompositeProcessor:
         mask = (y_vals_clean >= mean_y - n_sigma * std_y) & (y_vals_clean <= mean_y + n_sigma * std_y)
         return x_vals_clean[mask], y_vals_clean[mask]
 
+    def get_images_with_metadata_from_path(self, root_path):
+        """
+        Wrapper for ImageProcessor's recursive image/metadata loader.
+        """
+        return self.track_processor.get_images_with_metadata_from_path(root_path)
