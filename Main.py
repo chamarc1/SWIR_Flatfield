@@ -5,15 +5,18 @@ This script processes Short-Wave Infrared (SWIR) images to create flatfield corr
 A flatfield correction removes spatial variations in sensor response, making images
 more uniform and improving data quality.
 
+The script now automatically processes ALL filter wheel positions (pos1-pos4) and creates
+combined visualizations showing all positions together.
+
 Usage:
-    python Main.py --wheel_pos <position> [--num_sigma <value>]
+    python Main.py [--num_sigma <value>]
     
 Example:
-    python Main.py --wheel_pos 1 --num_sigma 1.0
+    python Main.py --num_sigma 1.0
 
 __author__ =    "Charlemagne Marc"
 __copyright__ = "Copyright 2025, ESI SWIR Project"
-__version__ =   "1.1.1"
+__version__ =   "2.0.0"
 __email__ =     "chamrc1@oumbc.edu"
 """
 
@@ -34,24 +37,16 @@ def main():
     
     This function:
     1. Parses command line arguments
-    2. Creates flatfield processors for the specified filter position
-    3. Generates quadratic envelope flatfield corrections
-    4. Optionally characterizes pixel response
+    2. Creates flatfield processors for all filter positions
+    3. Generates combined plots for all positions
+    4. Creates both 2D composite and 3D envelope visualizations
     """
     # Set up command line argument parsing
     parser = argparse.ArgumentParser(
         description="Create flatfield corrections for SWIR images.\n\n"
-                   "This tool processes multiple SWIR images to create a flatfield\n"
-                   "correction that removes spatial variations in sensor response.",
+                   "This tool processes multiple SWIR images for ALL filter positions\n"
+                   "and creates combined visualizations showing all positions together.",
         formatter_class=argparse.RawTextHelpFormatter
-    )
-    
-    parser.add_argument(
-        "--wheel_pos",
-        required=True,
-        type=str,
-        help="Filter wheel position to process (e.g., '1', '2', '3')\n"
-             "This determines which filter data to use for processing."
     )
     
     parser.add_argument(
@@ -66,82 +61,62 @@ def main():
     # Parse the command line arguments
     args = parser.parse_args()
     
-    # composite
-    process_composite_images(args.wheel_pos)
-    
-    # flatfield
-    process_flatfield(args.wheel_pos, args.num_sigma)
+    # Process all positions
+    process_all_positions(args.num_sigma)
 
-# flatfield 2d and 3d
-def process_flatfield(wheel_pos, num_sigma):
-    print(f"Starting flatfield processing for filter position: {wheel_pos}")
+def process_all_positions(num_sigma):
+    """
+    Process all filter wheel positions and create combined visualizations.
+    
+    Args:
+        num_sigma (float): Standard deviation for Gaussian smoothing
+    """
+    print("Starting SWIR flatfield processing for ALL filter positions...")
     print(f"Using smoothing sigma: {num_sigma}")
     
     try:
-        # STEP 1: Create the flatfield processor
-        # This handles loading images and creating the correction
-        flatfield_processor = FlatfieldProcessor(wheel_pos)
+        # Create the flatfield processor (now handles all positions)
+        pos1_processor = FlatfieldProcessor("pos1")
+        pos2_processor = FlatfieldProcessor("pos2")
+        pos3_processor = FlatfieldProcessor("pos3")
+        pos4_processor = FlatfieldProcessor("pos4")
         
-        # STEP 2: Generate the main flatfield correction
-        # This creates a 2D correction based on quadratic envelope fitting
-        print("\nGenerating quadratic envelope flatfield...")
-        flatfield_processor.generate_quadratic_envelope_flatfield(smoothing_sigma=num_sigma)
+        # Process all positions and create combined plots and Generate detailed analysis for each position
+        print("\n" + "="*70)
+        print("Generating detailed flatfield analysis...")
+        print("="*70)
+        print("\n" + "="*70)
+        print("Filter Position 1:")
+        print("="*70)
+        pos1_processor.generate_quadratic_envelope_flatfield(smoothing_sigma=num_sigma)
+        print("\n" + "="*70)
+        print("Filter Position 2:")
+        print("="*70)
+        pos2_processor.generate_quadratic_envelope_flatfield(smoothing_sigma=num_sigma)
+        print("\n" + "="*70)
+        print("Filter Position 3:")
+        print("="*70)
+        pos3_processor.generate_quadratic_envelope_flatfield(smoothing_sigma=num_sigma)
+        print("\n" + "="*70)
+        print("Filter Position 4:")
+        print("="*70)
+        pos4_processor.generate_quadratic_envelope_flatfield(smoothing_sigma=num_sigma)
         
-        # STEP 3: Optional pixel response characterization
-        # Uncomment the line below to also generate pixel response analysis
-        # print("\nCharacterizing pixel response...")
-        # flatfield_processor.characterize_pixel_response(smoothing_sigma=num_sigma)
-        
-        print("\nFlatfield processing completed successfully!")
+        print("\n" + "="*70)
+        print("PROCESSING COMPLETE!")
+        print("="*70)
+        # print("Generated visualizations:")
+        # print("• Combined 2D composites (2x2 grid)")
+        # print("• Combined 3D envelopes (single plot)")
+        # print("• Individual 2D composites (4 separate plots)")
+        # print("• Individual 3D envelopes (4 separate plots)") 
+        # print("• Individual profile comparisons (4 separate plots)")
+        # print("• Individual flatfield corrections for each position")
         
     except Exception as e:
         print(f"Error during processing: {e}")
         print("Please check your input parameters and try again.")
-
-# composite image processing options
-def process_composite_images(wheel_pos):
-    """
-    Alternative processing method that creates composite images from multiple tracks.
-    This method combines cross-track and along-track images before flatfield processing.
-    
-    Args:
-        wheel_pos (str): Filter wheel position to process
-    """
-    try:
-        # Create processors for both imaging directions
-        crossTrack_processor = CompositeProcessor(directory_dict["crossTrack"], directory_dict["metadata"])
-        alongTrack_processor = CompositeProcessor(directory_dict["alongTrack"], directory_dict["metadata"])
-
-        # Get filter positions for this wheel position
-        cross_filter_pos = crossTrack_dict[wheel_pos]
-        cross_dark_pos = crossTrackDark_dict[wheel_pos]
-        along_filter_pos = alongTrack_dict[wheel_pos]
-        along_dark_pos = alongTrackDark_dict[wheel_pos]
-
-        # Choose correction method: "average" or "pairwise"
-        correction_mode = "pairwise"
-
-        # Generate composite images for both tracks
-        cross_composite = crossTrack_processor.generate_composite(
-            cross_filter_pos, cross_dark_pos, correction_mode=correction_mode
-        )
-        along_composite = alongTrack_processor.generate_composite(
-            along_filter_pos, along_dark_pos, correction_mode=correction_mode
-        )
-
-        # Combine composites and display
-        if cross_composite is not None and along_composite is not None:
-            composite_image = cross_composite + along_composite
-            plot_composite(composite_image)
-        
-    except Exception as e:
-        print(f"Error during composite processing: {e}")
-
+        raise
 
 if __name__ == "__main__":
-    """
-    This block runs when the script is executed directly (not imported).
-    It calls the main() function to start processing.
-    """
-    exit_code = main()
-    exit(exit_code)
+    main()
