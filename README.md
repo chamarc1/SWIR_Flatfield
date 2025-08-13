@@ -1,158 +1,370 @@
-# SWIR Image Processing Pipeline for Scientific Data
+# SWIR Flatfield Processing Pipeline
 
-This project provides a Python-based pipeline for processing scientific SWIR image data, specifically designed for handling multi-frame acquisitions across different experimental conditions. The core functionality includes dark frame correction, flatfield generation and application, composite image creation, flatfiled generation and tools for analyzing cross-track signal profiles.
+This project provides a comprehensive Python-based pipeline for processing Short-Wave Infrared (SWIR) images to generate high-quality flatfield corrections. The pipeline is specifically designed for the AirHARP2 SWIR sensor calibration, implementing advanced quadratic envelope fitting techniques to model and correct illumination variations.
+
+## What This Tool Does
+
+The pipeline automatically processes SWIR images from all four filter wheel positions and creates detailed flatfield corrections that remove spatial variations in sensor response. It uses sophisticated analysis techniques including:
+
+- **Quadratic envelope fitting** to model illumination patterns
+- **Cross-track and along-track profile extraction** at the optical center
+- **Sigma filtering** for robust outlier removal
+- **Savitzky-Golay smoothing** for noise reduction
+- **2D flatfield map generation** with normalization to the optical center
 
 ## Project Structure
 
-The project is organized into the following key Python modules:
+The project consists of four main Python modules:
 
-* **`Main.py`**: This script is intended as the entry point for running the image processing pipeline. It will import and utilize the classes and functions defined in the other modules to load data, perform processing, and save results.
-* **`CompositeProcessor.py`**: Contains the `CompositeProcessor` class, which handles the core image processing tasks. This includes:
-    * Loading and managing image data organized by filter and degree.
-    * Calculating average dark frames.
-    * Correcting images for dark frames.
-    * Generating composite images by averaging corrected frames.
-    * Generating and applying flatfield corrections.
-    * Analyzing and plotting cross-track signal profiles, including core identification and FWHM calculation.
-    * Fitting quadratic curves to data.
-    * Applying sigma filtering for outlier removal.
-* **`ImageProcessor.py`**: Contains the `ImageProcessor` class, responsible for the initial loading and organization of image data from a specified directory structure. It reads image files and stores them in a structured dictionary format based on the directory hierarchy (filter and degree).
-* **`Constants.py`**: Defines various constants used throughout the project, such as default file paths for saving generated plots (e.g., composite images, parabola plots, flatfield images).
+### Core Processing Modules
 
-## Functionality
+* **`Main.py`**: Entry point that processes all filter positions (pos1-pos4) automatically. Run this script to generate flatfield corrections for all positions with a single command.
 
-The project offers the following functionalities:
+* **`FlatfieldProcessor.py`**: The heart of the pipeline containing the `FlatfieldProcessor` class with methods for:
+    - Extracting brightness profiles from cross-track and along-track directions
+    - Fitting quadratic envelopes to model illumination gradients
+    - Generating 2D flatfield correction maps
+    - Creating comprehensive visualization plots
+    - Applying flatfield corrections to raw images
 
-* **Data Loading and Organization**: Efficiently loads image data from a directory structure, organizing it by experimental parameters like filter position and degree.
-* **Dark Frame Correction**: Calculates an average dark frame from specified dark exposures and subtracts it from the science and flatfield images to reduce sensor noise and bias.
-* **Flatfield Correction**: Generates a full-image flatfield from dedicated flatfield exposures to correct for pixel sensitivity variations and uneven illumination. This flatfield can then be applied to science images.
-* **Composite Image Generation**: Creates high signal-to-noise ratio composite images by averaging multiple dark and flatfield corrected frames acquired under the same experimental conditions.
-* **Cross-Track Signal Analysis**: Provides tools to extract and analyze 1D signal profiles (e.g., along a specific row or averaged rows) from the 2D images. This includes:
-    * Identifying the "core" region of a signal peak.
-    * Calculating the Full Width at Half Maximum (FWHM).
-    * Plotting the signal and its core/FWHM.
-* **Curve Fitting**: Implements quadratic (parabolic) fitting to analyze trends in the data.
-* **Outlier Removal**: Utilizes sigma filtering to identify and remove data points that deviate significantly from the mean.
-* **Visualization**: Includes plotting functions to display composite images, cross-track signal profiles, and flatfield images.
+* **`CompositeProcessor.py`**: Contains the `CompositeProcessor` class for:
+    - Loading and organizing image data by filter position and degree
+    - Computing average dark frames for noise correction
+    - Generating composite images from multiple exposures
+    - Managing dark frame subtraction workflows
 
-## Flatfield Characterization and Application
+* **`ImageProcessor.py`**: Handles low-level image operations:
+    - Loading images from directory structures
+    - Reading metadata from CSV files
+    - Converting between image formats
+    - Managing file paths and organization
 
-### Flatfield Characterization
+### Configuration
 
-The pipeline now supports robust pixel-by-pixel flatfield characterization, following best practices from the AirHARP2 SWIR calibration protocol:
+* **`Constants.py`**: Defines system configuration including:
+    - File paths for input data and output plots
+    - Filter position mappings for different wavelengths
+    - Dark frame position associations
+    - Optical center coordinates
+    - Mathematical functions for curve fitting
 
-- **Composite Generation:** Uses both cross-track and along-track uniform-illumination images to generate composite images.
-- **Averaging and Smoothing:** Combines and optionally smooths these composites to create a high-SNR flatfield reference.
-- **Normalization:** The flatfield is normalized to a mean of 1, ensuring that only pixel-to-pixel sensitivity variations are corrected.
-- **Defective Pixel Handling:** Pixels with abnormally high or low response (beyond 3 standard deviations from the mean) are automatically replaced with the local median value.
-- **Metadata Logging:** Each flatfield characterization saves a metadata dictionary (including date, filter positions, smoothing parameters, and statistics) alongside the flatfield array for full reproducibility.
-- **Saving:** The flatfield and its metadata are saved as a `.npy` or `.npz` file for future use.
+## Current Filter Configuration
 
-### Applying Flatfield Correction
+The pipeline is configured for four filter positions:
 
-- **Correction Workflow:** When raw science images are available, the pipeline can load the saved flatfield and metadata, subtract the appropriate dark frame, and apply the flatfield correction pixel-by-pixel.
-- **Reproducibility:** The correction step logs which flatfield was used and its parameters, ensuring traceability for all processed data.
+- **pos1**: 1.57μm filter (FILTPOS_050)
+- **pos2**: 1.55μm filter (FILTPOS_090) 
+- **pos3**: 1.38μm filter (FILTPOS_130)
+- **pos4**: Open position (FILTPOS_169)
 
-### Example Usage
-
-```python
-from project_modules.FlatfieldProcessor import FlatfieldProcessor
-
-# Characterize and save flatfield (run once per calibration session)
-flatfield_processor = FlatfieldProcessor(wheel_pos="050")
-flatfield = flatfield_processor.characterize_pixel_response(smoothing_sigma=1.0, save_path="flatfield_050.npy")
-
-# Later, apply flatfield to raw images
-corrected_image, metadata = flatfield_processor.apply_flatfield_to_raw(raw_image, "flatfield_050.npy", dark_frame)
-```
-
-### Logging and Metadata
-
-- All major processing steps print informative log messages to the console.
-- Flatfield files include metadata such as creation date, filter positions, smoothing parameters, and summary statistics.
-
----
-
-**These improvements ensure your pipeline is fully aligned with current best practices for SWIR sensor calibration and is ready for reproducible, quantitative scientific analysis.**
+Each position has associated dark frames and specific integration times optimized for the target wavelength.
 
 ## Quick Start Guide
 
-### What is Flatfield Correction?
+### What This Tool Does
 
-A flatfield correction removes spatial variations in sensor response, making your images more uniform and improving data quality. Think of it like correcting for uneven lighting in a photograph - some parts of the sensor might be slightly more or less sensitive than others, and this tool creates a correction to even that out.
+The flatfield processing pipeline:
+
+1. **Analyzes Images**: Loads SWIR images from all four filter positions automatically
+2. **Extracts Profiles**: Analyzes brightness variations in cross-track and along-track directions
+3. **Fits Quadratic Envelopes**: Creates smooth mathematical models of illumination patterns
+4. **Generates Corrections**: Creates 2D flatfield maps to correct sensor variations
+5. **Produces Visualizations**: Generates comprehensive plots showing analysis results
 
 ### Basic Usage
 
-To process images for a specific filter position:
-
+**Process all filter positions with default settings:**
 ```bash
-python Main.py --wheel_pos pos1
+python Main.py
 ```
 
-With custom smoothing:
-
+**Adjust smoothing for more or less aggressive correction:**
 ```bash
-python Main.py --wheel_pos pos1 --num_sigma 2.0    # More smoothing
-python Main.py --wheel_pos pos1 --num_sigma 0.5    # Less smoothing  
-python Main.py --wheel_pos pos1 --num_sigma 0      # No smoothing
+python Main.py --num_sigma 2.0    # More smoothing (gentler correction)
+python Main.py --num_sigma 0.5    # Less smoothing (preserves more detail)
+python Main.py --num_sigma 0      # No smoothing
 ```
 
 ### Understanding the Parameters
 
-#### --wheel_pos (Required)
-- **What it is**: The filter wheel position you want to process
-- **Example values**: "pos1", "pos2", "pos3", "pos4" (based on your Constants.py setup)
-- **Why needed**: Different filters may need different corrections
-
 #### --num_sigma (Optional)
-- **What it is**: Controls how much smoothing is applied to the correction
 - **Default**: 1.0
-- **Higher values** (e.g., 2.0): More smoothing, gentler correction
-- **Lower values** (e.g., 0.5): Less smoothing, preserves more detail
-- **Zero**: No smoothing at all
+- **What it controls**: Amount of smoothing applied during profile extraction and envelope fitting
+- **Higher values**: Create smoother, more gradual corrections
+- **Lower values**: Preserve fine details but may include more noise
+- **Value of 0**: Disables smoothing entirely
 
-## Detailed Setup and Usage
+## How the Algorithm Works
 
-### 1. Installation
+### 1. Profile Extraction
 
-* Ensure you have Python 3.x installed on your system.
-* Install the required Python libraries:
-    ```bash
-    pip install numpy matplotlib scipy pillow pandas
-    ```
-* Place the `CompositeProcessor.py`, `FlatfieldProcessor.py`, `ImageProcessor.py`, and `Constants.py` files in your project directory.
+The pipeline extracts 1D brightness profiles from 2D images:
 
-### 2. Data Organization
+- **Cross-track profiles**: Cut through the image horizontally at the optical center Y position
+- **Along-track profiles**: Cut through the image vertically at the optical center X position
+- **Averaging window**: Profiles are averaged over a small window around the optical center for noise reduction
 
-* Organize your image data in a directory structure that the `ImageProcessor` can understand. Typically, this involves a main directory containing subdirectories for each filter position, and within each filter directory, subdirectories for different degree settings. Ensure your dark frames and flatfield frames are placed in appropriately named filter positions (e.g., "dark", "flat"). This structure may be updated with files from NASA testing.
+### 2. Data Cleaning
 
-### 3. Configuration (`Constants.py`)
+Each profile undergoes robust cleaning:
 
-* Review and modify the paths defined in `Constants.py` to specify where you want the generated plots and flatfield files to be saved.
+- **Sigma filtering**: Removes outliers beyond a specified threshold (default: 2σ)
+- **Low-signal masking**: Excludes pixels with signal less than half the maximum
+- **Validity checks**: Ensures sufficient data points remain for reliable fitting
 
-### 4. Running the Pipeline (`Main.py`)
+### 3. Envelope Fitting
 
-* The main script is run from the command line and accepts arguments for the filter wheel position and optional Gaussian smoothing:
-    ```bash
-    python Main.py --wheel_pos <FILTER_WHEEL_POSITION> [--num_sigma <SMOOTHING_SIGMA>]
-    ```
+The cleaned profiles are fitted with quadratic functions:
 
-* Examples:
-    ```bash
-    python Main.py --wheel_pos pos1 --num_sigma 1.5
-    python Main.py --wheel_pos pos2
-    python Main.py --wheel_pos pos3 --num_sigma 0    # No smoothing
-    ```
+- **Savitzky-Golay smoothing**: Applied first to reduce noise while preserving shape
+- **Quadratic fitting**: Models illumination as f(x) = ax² + bx + c
+- **Fallback options**: Linear or constant fits if quadratic fails
 
-* The script will:
-    - Instantiate a `FlatfieldProcessor` for the specified wheel position.
-    - Characterize the pixel-to-pixel flatfield response using composite images from both cross-track and along-track directions.
-    - Apply optional smoothing and handle defective pixels.
-    - Save the resulting flatfield and metadata for future use.
+### 4. 2D Map Generation
 
-### 5. Applying Flatfield to Raw Images
+Individual 1D fits are combined into a full 2D correction:
 
-* Once you have raw images and a saved flatfield, you can use the `apply_flatfield_to_raw` method in `FlatfieldProcessor` to correct your data (see the "Flatfield Characterization and Application" section above for an example).
+- **Additive combination**: Cross-track and along-track corrections are combined
+- **Optical center normalization**: Map is normalized so the optical center has value 1.0
+- **Quality assurance**: Bad pixels are identified and replaced with median values
+
+## Output Files and Plots
+
+The pipeline generates several types of output in the `Images/` directory:
+
+### Individual Position Analysis
+- **Combined profile plots**: Shows raw data, filtered data, smoothed profiles, and quadratic envelopes for each position
+- **3D envelope visualizations**: Three-dimensional plots showing profile cuts and their fitted envelopes
+
+### Generated Flatfield Maps
+- **2D flatfield maps**: Visual representation of the correction with statistics
+- **Cross-sections**: Profiles through the optical center showing correction behavior
+- **Saved correction data**: `.npz` files containing flatfield arrays and metadata for later use
+
+### Example Output Interpretation
+
+**Profile Plots**: 
+- Raw data points show the measured brightness
+- Filtered data (green) shows outlier-removed points
+- Smoothed profile (black) shows noise-reduced signal
+- Envelope (red) shows the fitted quadratic model
+
+**3D Plots**:
+- Show the spatial relationship between cross-track and along-track profiles
+- Envelope surfaces demonstrate the mathematical model of illumination patterns
+
+**Flatfield Maps**:
+- Bright regions indicate areas where the sensor is less sensitive (needs more correction)
+- Dark regions indicate areas where the sensor is more sensitive (needs less correction)
+- Values around 1.0 indicate areas needing minimal correction
+
+## Advanced Usage
+
+### Applying Corrections to Science Data
+
+Once flatfield maps are generated, you can apply them to raw science images:
+
+```python
+from project_modules.FlatfieldProcessor import FlatfieldProcessor
+
+# Initialize processor for specific filter position
+processor = FlatfieldProcessor("pos1")
+
+# Apply correction to a raw image
+corrected_image, flatfield_map, metadata = processor.apply_flatfield_correction(
+    raw_image=your_raw_image,
+    show_comparison=True  # Display before/after plots
+)
+```
+
+### Custom Processing Parameters
+
+```python
+# Generate flatfield with custom parameters
+processor.generate_quadratic_envelope_flatfield(
+    avg_window=15,        # Larger averaging window for more stable profiles
+    num_sigma=1.5,        # Custom outlier threshold
+    window_length=81,     # Longer smoothing window
+    polyorder=3           # Higher polynomial order for smoothing
+)
+```
+
+### Working with Saved Flatfields
+
+```python
+# Load a previously saved flatfield
+import numpy as np
+data = np.load("flatfield_map_pos1.npz")
+flatfield_map = data['flatfield_map']
+metadata = data['metadata'].item()  # Convert back to dict
+cross_coeffs = data['cross_track_coeffs']
+along_coeffs = data['along_track_coeffs']
+```
+
+## Installation and Dependencies
+
+### Required Python Packages
+
+```bash
+pip install numpy matplotlib scipy pillow pandas
+```
+
+### System Requirements
+
+- **Python**: 3.7 or later
+- **Memory**: At least 4GB RAM for processing large image sets
+- **Storage**: Sufficient space for input images and generated outputs
+- **Display**: GUI backend for matplotlib plots (Qt5 recommended)
+
+### File Structure Requirements
+
+Ensure your data follows this structure:
+```
+data_directory/
+├── LEFT_RIGHT/          # Cross-track illumination images
+├── UP_DOWN/             # Along-track illumination images  
+└── metadata.csv         # Image metadata and TEC readings
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**"No images found for filter position"**
+- Verify filter position mappings in `Constants.py`
+- Check that data directories contain expected image files
+- Ensure file naming conventions match the expected patterns
+
+**"Failed to extract profiles"**
+- Try adjusting the `avg_window` parameter (start with 5-15)
+- Check that optical center coordinates are correct for your data
+- Verify that images have sufficient signal levels
+
+**"Quadratic fitting failed"**
+- The algorithm automatically falls back to linear or constant fits
+- Consider increasing `num_sigma` to be less strict about outliers
+- Check that profiles have sufficient valid data points
+
+**Memory errors**
+- Process one filter position at a time if needed
+- Reduce the number of images being processed simultaneously
+- Ensure sufficient RAM is available
+
+### Performance Optimization
+
+**Faster processing:**
+- Use smaller averaging windows when possible
+- Reduce the number of images per position if signal allows
+- Process filter positions sequentially rather than in parallel
+
+**Better results:**
+- Use larger averaging windows for noisier data
+- Increase smoothing parameters for unstable fits
+- Verify optical center coordinates are accurate
+
+## Technical Details
+
+### Optical Center Configuration
+
+The pipeline uses fixed optical center coordinates defined in `Constants.py`:
+```python
+OPTICAL_CENTER_X = 640  # Cross-track center
+OPTICAL_CENTER_Y = 510  # Along-track center
+```
+
+These coordinates should be verified and adjusted based on your specific sensor and optical system.
+
+### Mathematical Model
+
+The quadratic envelope model assumes illumination follows:
+```
+I(x) = a·x² + b·x + c
+```
+
+Where:
+- `a` captures curvature (vignetting effects)
+- `b` captures linear gradients (alignment effects)  
+- `c` captures the baseline illumination level
+
+### Data Processing Pipeline
+
+1. **Image Loading**: Multi-threaded loading with metadata association
+2. **Dark Correction**: Robust averaging and subtraction with overflow protection
+3. **Profile Extraction**: Windowed averaging with comprehensive validity checking
+4. **Outlier Removal**: Statistical filtering with configurable thresholds
+5. **Smoothing**: Savitzky-Golay filtering with automatic parameter adjustment
+6. **Envelope Fitting**: Hierarchical fitting (quadratic → linear → constant)
+7. **Map Generation**: 2D interpolation with normalization and quality control
+
+## Contributing
+
+This pipeline is designed for scientific reproducibility and extensibility. When modifying the code:
+
+1. **Maintain logging**: All major steps should include informative print statements
+2. **Preserve metadata**: Include processing parameters in all output files
+3. **Add error handling**: Gracefully handle edge cases and provide helpful error messages
+4. **Update documentation**: Modify this README when changing functionality
+
+## Getting Help
+
+For questions, bug reports, or feature requests:
+
+1. **Check this documentation** for parameter explanations and troubleshooting
+2. **Examine the generated plots** to understand what the algorithm is doing
+3. **Try different parameter values** to see their effects on results
+4. **Contact**: Charlemagne Marc (chamrc1@umbc.edu)
+
+## What the Tool Does
+
+1. **Loads Images**: Reads in multiple SWIR images from the specified filter position
+2. **Extracts Profiles**: Analyzes how brightness varies across the image
+3. **Fits Envelopes**: Creates smooth curves that follow the brightness patterns
+4. **Creates Correction**: Generates a 2D flatfield correction
+5. **Shows Results**: Displays plots showing the correction and analysis
+
+## Output Files
+
+The tool creates several output files in the `Images/` directory:
+
+- **flatfield.png**: The final flatfield correction image
+- **flatfield_plot.png**: Analysis plots showing how the correction was created
+- **along_track.png**: Profile analysis in the along-track direction
+- **along_track_core.png**: Core region analysis for along-track
+- **composite.png**: Combined image analysis
+
+## Understanding the Plots
+
+### Profile Plots
+- Show how brightness varies across the image
+- Blue lines: Cross-track direction (left-to-right across the image)
+- Red lines: Along-track direction (top-to-bottom of the image)
+
+### 3D Plots
+- Show the overall shape of the flatfield correction
+- Higher areas appear brighter in the final correction
+
+### Envelope Plots
+- Show the smooth curves fitted to the brightness profiles
+- These curves are used to create the final correction
+
+## Troubleshooting
+
+### "No images found for filter position"
+- Check that your filter position exists in the data
+- Verify the Constants.py file has the correct mappings
+- Ensure your data directory structure matches what the code expects
+
+### "Error during processing"
+- Try different smoothing values (--num_sigma)
+- Check that input images are readable and in the correct format
+- Ensure you have write permissions in the output directory
+- Verify that all required dependencies are installed
+
+### Plots look wrong
+- Try adjusting the smoothing parameter
+- Check that input images are properly calibrated
+- Verify dark frame corrections are working
+- Make sure optical center coordinates are correct for your data
 
 ## What the Tool Does
 
