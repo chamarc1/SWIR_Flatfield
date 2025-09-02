@@ -27,6 +27,9 @@ from project_modules.CompositeProcessor import CompositeProcessor
 from project_modules.FlatfieldProcessor import FlatfieldProcessor, plot_composite
 from project_modules.Constants import directory_dict, crossTrack_dict, crossTrackDark_dict, alongTrack_dict, alongTrackDark_dict
 import argparse
+import os
+import matplotlib.pyplot as plt
+import numpy as np
 
 #----------------------------------------------------------------------------
 #-- MAIN FUNCTION
@@ -74,6 +77,10 @@ def process_all_positions(num_sigma):
     print("Starting SWIR flatfield processing for ALL filter positions...")
     print(f"Using smoothing sigma: {num_sigma}")
     
+    # Create output directory for PowerPoint plots
+    presentation_dir = "/data/home/cmarc/SWIR_Projects/Flatfield/Images/PowerPoint_Plots"
+    os.makedirs(presentation_dir, exist_ok=True)
+    
     try:
         # Create the flatfield processor (now handles all positions)
         pos1_processor = FlatfieldProcessor("pos1")
@@ -81,37 +88,58 @@ def process_all_positions(num_sigma):
         pos3_processor = FlatfieldProcessor("pos3")
         pos4_processor = FlatfieldProcessor("pos4")
         
+        # Store processors for summary plots
+        processors = {
+            "pos1": pos1_processor,
+            "pos2": pos2_processor, 
+            "pos3": pos3_processor,
+            "pos4": pos4_processor
+        }
+        
         # Process all positions and create combined plots and Generate detailed analysis for each position
         print("\n" + "="*70)
         print("Generating detailed flatfield analysis...")
         print("="*70)
+        
+        # Process each position with enhanced plot saving
+        position_results = {}
+        
         print("\n" + "="*70)
         print("Filter Position 1:")
         print("="*70)
-        pos1_processor.generate_quadratic_envelope_flatfield(smoothing_sigma=num_sigma)
+        position_results["pos1"] = pos1_processor.process_position_with_plots("pos1", num_sigma, presentation_dir)
+        
         print("\n" + "="*70)
         print("Filter Position 2:")
         print("="*70)
-        pos2_processor.generate_quadratic_envelope_flatfield(smoothing_sigma=num_sigma)
+        position_results["pos2"] = pos2_processor.process_position_with_plots("pos2", num_sigma, presentation_dir)
+        
         print("\n" + "="*70)
         print("Filter Position 3:")
         print("="*70)
-        pos3_processor.generate_quadratic_envelope_flatfield(smoothing_sigma=num_sigma)
+        position_results["pos3"] = pos3_processor.process_position_with_plots("pos3", num_sigma, presentation_dir)
+        
         print("\n" + "="*70)
         print("Filter Position 4:")
         print("="*70)
-        pos4_processor.generate_quadratic_envelope_flatfield(smoothing_sigma=num_sigma)
+        position_results["pos4"] = pos4_processor.process_position_with_plots("pos4", num_sigma, presentation_dir)
+        
+        # Generate summary plots for PowerPoint
+        print("\n" + "="*70)
+        print("Generating PowerPoint Summary Plots...")
+        print("="*70)
+        FlatfieldProcessor.generate_summary_plots(position_results, presentation_dir)
         
         print("\n" + "="*70)
         print("PROCESSING COMPLETE!")
         print("="*70)
-        # print("Generated visualizations:")
-        # print("• Combined 2D composites (2x2 grid)")
-        # print("• Combined 3D envelopes (single plot)")
-        # print("• Individual 2D composites (4 separate plots)")
-        # print("• Individual 3D envelopes (4 separate plots)") 
-        # print("• Individual profile comparisons (4 separate plots)")
-        # print("• Individual flatfield corrections for each position")
+        print(f"PowerPoint plots saved to: {presentation_dir}")
+        print("Generated visualizations:")
+        print("• Individual position profile analysis plots")
+        print("• Individual position 3D envelope plots")
+        print("• Individual position 2D flatfield maps")
+        print("• Multi-position summary plots")
+        print("• Before/after correction comparison plots")
         
     except Exception as e:
         print(f"Error during processing: {e}")
