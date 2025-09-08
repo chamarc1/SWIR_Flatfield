@@ -216,7 +216,7 @@ def create_detailed_comparison_table(results):
     
     if worst_pos:
         print(f"⚠️  LEAST EFFECTIVE: {worst_pos} ({wavelength_map.get(worst_pos, 'Unknown')}) with {worst_improvement:.2f}% improvement")
-    
+
     # Calculate overall statistics
     all_improvements = []
     for pos, data in results.items():
