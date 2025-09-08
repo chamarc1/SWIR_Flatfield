@@ -1177,3 +1177,161 @@ Processing Info:
         
         plt.tight_layout()
         plt.show()
+
+    def process_position_with_plots(self, position, num_sigma, presentation_dir):
+        """
+        Process a single filter position and generate all associated plots.
+        
+        Args:
+            position (str): Filter position (e.g., "pos1", "pos2", etc.)
+            num_sigma (float): Standard deviation for Gaussian smoothing
+            presentation_dir (str): Directory to save PowerPoint plots
+            
+        Returns:
+            dict: Results containing processed data for the position
+        """
+        print(f"Processing filter position: {position}")
+        
+        # Extract profiles for this position
+        try:
+            # Extract row and column profiles
+            row_data = self.extract_row_profile(num_sigma=num_sigma)
+            col_data = self.extract_column_profile(num_sigma=num_sigma)
+            
+            # Generate flatfield using quadratic envelope method
+            flatfield_result = self.generate_quadratic_envelope_flatfield(
+                num_sigma=num_sigma, 
+                smoothing_sigma=num_sigma if num_sigma > 0 else None
+            )
+            
+            # Create combined profile plots
+            self.plot_combined_profiles(
+                row_data=row_data, 
+                col_data=col_data, 
+                num_sigma=num_sigma
+            )
+            
+            # Save individual position plots to presentation directory
+            position_plots_dir = os.path.join(presentation_dir, f"Position_{position}")
+            os.makedirs(position_plots_dir, exist_ok=True)
+            
+            # Generate 3D envelope plot
+            if row_data and col_data and flatfield_result:
+                x_vals_cross, profile_cross, envelope_cross = col_data
+                x_vals_along, profile_along, envelope_along = row_data
+                
+                self.plot_3d_envelope(
+                    x_vals_cross, profile_cross, envelope_cross,
+                    x_vals_along, profile_along, envelope_along
+                )
+            
+            # Generate flatfield map
+            flatfield_map = self.generate_flatfield_map(num_sigma=num_sigma)
+            
+            # Package results
+            results = {
+                'position': position,
+                'row_data': row_data,
+                'col_data': col_data,
+                'flatfield_result': flatfield_result,
+                'flatfield_map': flatfield_map,
+                'processor': self
+            }
+            
+            print(f"Successfully processed position {position}")
+            return results
+            
+        except Exception as e:
+            print(f"Error processing position {position}: {e}")
+            return {
+                'position': position,
+                'error': str(e),
+                'processor': self
+            }
+
+    @staticmethod
+    def generate_summary_plots(position_results, presentation_dir):
+        """
+        Generate summary plots comparing all filter positions.
+        
+        Args:
+            position_results (dict): Dictionary containing results for all positions
+            presentation_dir (str): Directory to save plots
+        """
+        print("Generating summary comparison plots...")
+        
+        # Create summary plots directory
+        summary_dir = os.path.join(presentation_dir, "Summary_Plots")
+        os.makedirs(summary_dir, exist_ok=True)
+        
+        try:
+            # Extract data for all positions
+            positions = []
+            row_profiles = []
+            col_profiles = []
+            
+            for pos_key, result in position_results.items():
+                if 'error' not in result and result.get('row_data') and result.get('col_data'):
+                    positions.append(pos_key)
+                    row_profiles.append(result['row_data'])
+                    col_profiles.append(result['col_data'])
+            
+            if not positions:
+                print("Warning: No valid position data available for summary plots")
+                return
+            
+            # Create multi-position comparison plot
+            fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
+            
+            colors = ['blue', 'red', 'green', 'orange']
+            
+            # Plot row profiles
+            for i, (pos, (x_vals, profile, envelope)) in enumerate(zip(positions, row_profiles)):
+                color = colors[i % len(colors)]
+                ax1.plot(x_vals, profile, label=f'{pos} data', color=color, alpha=0.7)
+                ax1.plot(x_vals, envelope, label=f'{pos} fit', color=color, linewidth=2)
+            
+            ax1.set_title('Along-Track Profiles Comparison')
+            ax1.set_xlabel('Along-Track Pixels')
+            ax1.set_ylabel('Normalized Response')
+            ax1.legend()
+            ax1.grid(True, alpha=0.3)
+            
+            # Plot column profiles
+            for i, (pos, (x_vals, profile, envelope)) in enumerate(zip(positions, col_profiles)):
+                color = colors[i % len(colors)]
+                ax2.plot(x_vals, profile, label=f'{pos} data', color=color, alpha=0.7)
+                ax2.plot(x_vals, envelope, label=f'{pos} fit', color=color, linewidth=2)
+            
+            ax2.set_title('Cross-Track Profiles Comparison')
+            ax2.set_xlabel('Cross-Track Pixels')
+            ax2.set_ylabel('Normalized Response')
+            ax2.legend()
+            ax2.grid(True, alpha=0.3)
+            
+            # Create flatfield maps comparison
+            if len(position_results) >= 2:
+                # Show first two positions as examples
+                pos_keys = list(position_results.keys())[:2]
+                
+                for i, pos_key in enumerate(pos_keys):
+                    result = position_results[pos_key]
+                    if 'flatfield_map' in result and result['flatfield_map'] is not None:
+                        ax = ax3 if i == 0 else ax4
+                        im = ax.imshow(result['flatfield_map'], cmap='viridis', aspect='auto')
+                        ax.set_title(f'Flatfield Map - {pos_key}')
+                        ax.set_xlabel('Cross-Track Pixels')
+                        ax.set_ylabel('Along-Track Pixels')
+                        plt.colorbar(im, ax=ax, label='Correction Factor')
+            
+            plt.tight_layout()
+            summary_plot_path = os.path.join(summary_dir, 'multi_position_comparison.png')
+            plt.savefig(summary_plot_path, dpi=300, bbox_inches='tight')
+            plt.show()
+            
+            print(f"Summary plots saved to: {summary_dir}")
+            
+        except Exception as e:
+            print(f"Error generating summary plots: {e}")
+            import traceback
+            traceback.print_exc()
