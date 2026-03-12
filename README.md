@@ -14,7 +14,7 @@ The enhanced pipeline automatically processes SWIR images from all four filter w
 - **1.5-2% uniformity improvement** achieved for most filter positions
 - **Complete diagnostic and analysis suite** for scientific documentation
 
-## 📊 Performance Summary
+## Performance Summary
 
 | Position | Wavelength | Method | Mean Improvement | Rating |
 |----------|------------|--------|------------------|--------|
@@ -154,7 +154,7 @@ processor.generate_flatfield_map(
 )
 ```
 
-## 🛠️ Installation
+## Installation
 
 ### Required Dependencies
 
