@@ -1,6 +1,6 @@
 """
 
-__author__ = cjescobar
+__author__ = Charlemagne Marc
 __updated_by__ = "Charlemagne Marc"
 __copyright__ = "Copyright 2024, ESI SWIR Project"
 
@@ -147,4 +147,5 @@ def main():
 
 if __name__ == "__main__":
     main();
+
 # end if
