@@ -4,7 +4,7 @@
 
 This project provides a comprehensive Python-based pipeline for processing Short-Wave Infrared (SWIR) images to generate high-quality flatfield corrections. The pipeline implements advanced quadratic envelope fitting techniques with position-specific optimization to achieve maximum illumination uniformity across all filter positions.
 
-## 🚀 What This Tool Does
+## What This Tool Does
 
 The enhanced pipeline automatically processes SWIR images from all four filter wheel positions and creates position-optimized flatfield corrections that remove spatial variations in sensor response. Key features include:
 
@@ -23,7 +23,7 @@ The enhanced pipeline automatically processes SWIR images from all four filter w
 | pos3 | 1.38μm | divide | 0.31% | ⚠️ MODERATE |
 | pos4 | Open | multiply | 1.63% | ✅ GOOD |
 
-## 🏗️ Project Structure
+## Project Structure
 
 ### Core Processing Modules
 
@@ -55,7 +55,7 @@ The enhanced pipeline automatically processes SWIR images from all four filter w
 
 * **`test_updated_profiles.py`**: Validation testing with position-optimized methods
 
-## ⚡ Quick Start
+## Quick Start
 
 ### Basic Usage - Process All Positions
 
@@ -81,7 +81,7 @@ python test_updated_profiles.py
 python analyze_flatfield_effectiveness.py
 ```
 
-## 🎯 Key Features
+## Key Features
 
 ### Position-Optimized Correction
 
@@ -103,7 +103,7 @@ The pipeline automatically selects the optimal correction method for each filter
 - **Regional uniformity assessment** for different detector areas
 - **Spatial frequency analysis** for correction effectiveness evaluation
 
-## 📈 Output Files and Visualizations
+## Output Files and Visualizations
 
 ### PowerPoint-Ready Plots (`Images/PowerPoint_Plots/`)
 
@@ -124,7 +124,7 @@ The pipeline automatically selects the optimal correction method for each filter
 - **Position-optimized test results** (`updated_test_results_pos[1-4].json`)
 - **Combined summary** (`position_optimized_summary.json`)
 
-## 🔧 Advanced Configuration
+## Advanced Configuration
 
 ### Applying Corrections to Science Data
 
@@ -169,7 +169,7 @@ pip install numpy matplotlib scipy pillow pandas
 - **Storage**: Sufficient space for outputs and analysis
 - **Display**: GUI backend for matplotlib
 
-## 📊 Technical Details
+## Technical Details
 
 ### Algorithm Overview
 
@@ -233,7 +233,7 @@ This pipeline generates comprehensive scientific documentation suitable for:
 - **Peer review** with complete methodology documentation
 - **Calibration records** with full processing parameter logs
 
-## 🤝 Contributing
+## Contributing
 
 This pipeline is designed for scientific reproducibility. When contributing:
 
@@ -242,13 +242,13 @@ This pipeline is designed for scientific reproducibility. When contributing:
 3. Include robust error handling
 4. Update documentation for any functionality changes
 
-## 📞 Contact
+## Contact
 
 **Charlemagne Marc**  
 Email: chamrc1@umbc.edu  
 AirHARP2 SWIR Calibration Team
 
-## 📝 Version History
+## Version History
 
 - **v2.0.0**: Enhanced position-optimized pipeline with comprehensive validation
 - **v1.0.0**: Initial flatfield correction implementation
